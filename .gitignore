@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Executables and installers
 *.exe
 *.msi
@@ -69,3 +70,60 @@ multi_agent_system/workspace/sandbox/
 # Large data files
 *.sqlite
 *.db
+=======
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Environment
+.env
+.env.local
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Test/Cache
+.pytest_cache/
+*.bak
+
+# Rapor/Dokümantasyon dosyaları (proje kodu değil)
+PROJE_DOKUMANTASYONU.txt
+PROJE_OZETI.txt
+PROJE_SON_DURUM.txt
+TEKNOLOJI_CALISMA_DOKUMANI.txt
+TEKNOLOJI_CALISMA_DOKUMANI.docx
+V2_DEGISIKLIK_RAPORU.txt
+V3_DEGISIKLIK_RAPORU.txt
+user_profile.txt
+error_log.txt
+test_output.log
+
+# Workspace (üretilen projeler ve temp dosyalar)
+workspace/projects/
+workspace/*.py
+workspace/*.txt
+workspace/logs/
+workspace/web_scraper_project/
+
+# Memory/Cache/Logs
+memory/
+cache/
+messages.jsonl
+models.json
+test_onysoft.py
+test_output.log
+>>>>>>> 3587aaa0cd7f47617cf2fcaf1085cfd818bfcc45

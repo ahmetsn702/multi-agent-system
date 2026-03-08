@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="theme-color" content="#0f0f1a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Multi-Agent AI</title>
+  <link rel="manifest" href="/static/manifest.json">
+  <style>
+    :root {
+      --bg: #0f0f1a;
+      --surface: #1a1a2e;
+      --surface2: #16213e;
+      --accent: #7c3aed;
+      --accent2: #a78bfa;
+      --green: #10b981;
+      --red: #ef4444;
+      --yellow: #f59e0b;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --border: #2d2d4e;
+      --card: #1e1e35;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--accent), #06b6d4);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    header h1 {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    header span {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      margin-left: auto;
+      box-shadow: 0 0 6px var(--green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.4;
+      }
+    }
+
+    /* ── Tabs ── */
+    .tabs {
+      display: flex;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .tab {
+      flex: 1;
+      padding: 10px 4px;
+      text-align: center;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all .2s;
+      letter-spacing: 0.3px;
+    }
+
+    .tab.active {
+      color: var(--accent2);
+      border-bottom-color: var(--accent);
+    }
+
+    /* ── Sections ── */
+    .section {
+      display: none;
+      padding: 16px;
+    }
+
+    .section.active {
+      display: block;
+    }
+
+    /* ── Input area ── */
+    .prompt-box {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+
+    .prompt-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent2);
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    textarea {
+      width: 100%;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.5;
+      resize: none;
+      min-height: 100px;
+      font-family: inherit;
+    }
+
+    textarea::placeholder {
+      color: var(--muted);
+    }
+
+    /* ── Quick prompts ── */
+    .quick-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+
+    .quick-row::-webkit-scrollbar {
+      display: none;
+    }
+
+    .quick-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 20px;
+      padding: 6px 12px;
+      font-size: 12px;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: all .2s;
+    }
+
+    .quick-btn:active {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    /* ── Run button ── */
+    .run-btn {
+      width: 100%;
+      background: linear-gradient(135deg, var(--accent), #9333ea);
+      border: none;
+      border-radius: 14px;
+      color: #fff;
+      font-size: 16px;
+      font-weight: 700;
+      padding: 14px;
+      cursor: pointer;
+      transition: all .2s;
+      letter-spacing: 0.5px;
+    }
+
+    .run-btn:active {
+      transform: scale(0.97);
+      opacity: 0.9;
+    }
+
+    .run-btn:disabled {
+      background: var(--muted);
+      cursor: not-allowed;
+    }
+
+    /* ── Log panel ── */
+    .log-panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      margin-top: 14px;
+      overflow: hidden;
+    }
+
+    .log-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .log-header span {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+
+    .log-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--accent2);
+    }
+
+    .spinner {
+      width: 10px;
+      height: 10px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent2);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      display: none;
+    }
+
+    .spinner.active {
+      display: block;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .log-body {
+      padding: 12px 14px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      max-height: 300px;
+      overflow-y: auto;
+      color: #94a3b8;
+    }
+
+    .log-body p {
+      margin-bottom: 2px;
+    }
+
+    .log-body .ok {
+      color: var(--green);
+    }
+
+    .log-body .err {
+      color: var(--red);
+    }
+
+    .log-body .info {
+      color: var(--accent2);
+    }
+
+    .log-body .cost {
+      color: var(--yellow);
+    }
+
+    /* ── Result card ── */
+    .result-card {
+      background: var(--surface2);
+      border: 1px solid var(--green);
+      border-radius: 16px;
+      padding: 14px;
+      margin-top: 12px;
+      display: none;
+    }
+
+    .result-card.show {
+      display: block;
+    }
+
+    .result-card h3 {
+      font-size: 13px;
+      color: var(--green);
+      margin-bottom: 8px;
+      letter-spacing: 0.5px;
+    }
+
+    .result-card p {
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text);
+      white-space: pre-wrap;
+    }
+
+    /* ── Projects list ── */
+    .project-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      transition: all .2s;
+    }
+
+    .project-card:active {
+      border-color: var(--accent);
+    }
+
+    .project-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 6px;
+      word-break: break-all;
+    }
+
+    .project-meta {
+      display: flex;
+      gap: 10px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .badge {
+      background: var(--surface);
+      border-radius: 6px;
+      padding: 2px 7px;
+      font-size: 10px;
+      color: var(--accent2);
+    }
+
+    /* ── Summary modal overlay ── */
+    .overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .7);
+      z-index: 200;
+      align-items: flex-end;
+    }
+
+    .overlay.show {
+      display: flex;
+    }
+
+    .modal {
+      background: var(--surface);
+      width: 100%;
+      border-radius: 24px 24px 0 0;
+      padding: 20px 16px;
+      max-height: 75vh;
+      overflow-y: auto;
+    }
+
+    .modal-close {
+      float: right;
+      background: var(--border);
+      border: none;
+      color: var(--text);
+      border-radius: 20px;
+      padding: 4px 12px;
+      cursor: pointer;
+      font-size: 13px;
+      margin-bottom: 10px;
+    }
+
+    .modal pre {
+      font-size: 11px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      color: var(--text);
+      font-family: monospace;
+    }
+
+    /* ── Sessions ── */
+    .session-row {
+      display: flex;
+      align-items: center;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 8px;
+      gap: 10px;
+    }
+
+    .session-status {
+      width: 8px;
+      min-width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .session-status.done {
+      background: var(--green);
+    }
+
+    .session-status.running {
+      background: var(--yellow);
+      animation: pulse 1s infinite;
+    }
+
+    .session-status.error {
+      background: var(--red);
+    }
+
+    .session-goal {
+      font-size: 13px;
+      color: var(--text);
+      flex: 1;
+    }
+
+    .session-id {
+      font-size: 10px;
+      color: var(--muted);
+      font-family: monospace;
+    }
+  </style>
+</head>
+
+<body>
+
+  <header>
+    <div class="logo">🤖</div>
+    <div>
+      <h1>Multi-Agent AI</h1>
+      <span>v2.0 · OpenRouter</span>
+    </div>
+    <div class="status-dot" id="statusDot"></div>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('run')">⚡ Çalıştır</div>
+    <div class="tab" onclick="switchTab('projects')">📁 Projeler</div>
+    <div class="tab" onclick="switchTab('sessions')">📋 Oturumlar</div>
+  </div>
+
+  <!-- RUN TAB -->
+  <div class="section active" id="tab-run">
+    <div class="prompt-box">
+      <div class="prompt-label">🎯 Hedef</div>
+      <textarea id="goalInput" placeholder="Ne yapmamı istiyorsun?&#10;&#10;Örnek: Python ile hesap makinesi yaz..."
+        rows="4"></textarea>
+    </div>
+
+    <div class="quick-row">
+      <div class="quick-btn" onclick="setQuick('Python ile hesap makinesi GUI uygulamasi yaz')">🧮 Hesap Makinesi</div>
+      <div class="quick-btn" onclick="setQuick('Python ile SQLite kullanarak not defteri uygulamasi yaz')">📝 Not
+        Defteri</div>
+      <div class="quick-btn" onclick="setQuick('Python ile web scraper yaz ve sonuclari CSV kaydet')">🕷️ Web Scraper
+      </div>
+      <div class="quick-btn" onclick="setQuick('Python ile ag port tarayici yaz')">🔍 Port Tarayıcı</div>
+      <div class="quick-btn" onclick="setQuick('Python ile dosya organizasyon araci yaz')">📂 Dosya Org.</div>
+    </div>
+
+    <button class="run-btn" id="runBtn" onclick="runGoal()">▶ Çalıştır</button>
+
+    <div class="log-panel" id="logPanel" style="display:none">
+      <div class="log-header">
+        <span>📡 CANLI LOG</span>
+        <div class="log-indicator">
+          <div class="spinner active" id="spinner"></div>
+          <span id="logStatus">Çalışıyor...</span>
+        </div>
+      </div>
+      <div class="log-body" id="logBody"></div>
+    </div>
+
+    <div class="result-card" id="resultCard">
+      <h3>✅ SONUÇ</h3>
+      <p id="resultText"></p>
+    </div>
+  </div>
+
+  <!-- PROJECTS TAB -->
+  <div class="section" id="tab-projects">
+    <div id="projectsList">
+      <p style="color:var(--muted);text-align:center;padding:40px 0">Yükleniyor...</p>
+    </div>
+  </div>
+
+  <!-- SESSIONS TAB -->
+  <div class="section" id="tab-sessions">
+    <div id="sessionsList">
+      <p style="color:var(--muted);text-align:center;padding:40px 0">Henüz oturum yok</p>
+    </div>
+    <button class="run-btn" style="margin-top:12px;background:var(--surface2);border:1px solid var(--border)"
+      onclick="loadSessions()">↻ Yenile</button>
+  </div>
+
+  <!-- Summary modal -->
+  <div class="overlay" id="overlay" onclick="closeModal()">
+    <div class="modal" onclick="event.stopPropagation()">
+      <button class="modal-close" onclick="closeModal()">✕ Kapat</button>
+      <pre id="modalContent"></pre>
+    </div>
+  </div>
+
+  <script>
+    const BASE = window.location.origin;
+
+    // ── Tab switching ──────────────────────────────
+    function switchTab(name) {
+      document.querySelectorAll('.tab').forEach((t, i) => {
+        t.classList.toggle('active', ['run', 'projects', 'sessions'][i] === name);
+      });
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      document.getElementById('tab-' + name).classList.add('active');
+      if (name === 'projects') loadProjects();
+      if (name === 'sessions') loadSessions();
+    }
+
+    // ── Quick prompts ──────────────────────────────
+    function setQuick(text) {
+      document.getElementById('goalInput').value = text;
+      switchTab('run');
+    }
+
+    // ── Run goal ───────────────────────────────────
+    async function runGoal() {
+      const goal = document.getElementById('goalInput').value.trim();
+      if (!goal) { alert('Lütfen bir hedef gir!'); return; }
+
+      const btn = document.getElementById('runBtn');
+      btn.disabled = true;
+      btn.textContent = '⏳ Çalışıyor...';
+
+      document.getElementById('logPanel').style.display = 'block';
+      document.getElementById('logBody').innerHTML = '';
+      document.getElementById('resultCard').classList.remove('show');
+      document.getElementById('spinner').classList.add('active');
+      document.getElementById('logStatus').textContent = 'Bağlanıyor...';
+
+      try {
+        const res = await fetch(`${BASE}/run`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ goal })
+        });
+        const { session_id } = await res.json();
+        appendLog(`🚀 Oturum başladı: ${session_id}`, 'info');
+        streamLogs(session_id);
+      } catch (e) {
+        appendLog('❌ Sunucuya bağlanılamadı: ' + e.message, 'err');
+        resetBtn();
+      }
+    }
+
+    function streamLogs(sessionId) {
+      const es = new EventSource(`${BASE}/stream/${sessionId}`);
+      document.getElementById('logStatus').textContent = 'Çalışıyor...';
+
+      es.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        if (data.log) {
+          const cls = data.log.includes('[COST]') ? 'cost'
+            : data.log.includes('✅') || data.log.includes('completed') ? 'ok'
+              : data.log.includes('❌') || data.log.includes('error') ? 'err'
+                : data.log.match(/🧠|📦|⚙️|🚀|🔍/) ? 'info' : '';
+          appendLog(data.log, cls);
+        }
+        if (data.status) {
+          es.close();
+          if (data.status === 'done') {
+            document.getElementById('resultCard').classList.add('show');
+            document.getElementById('resultText').textContent = data.result || 'Tamamlandı.';
+            document.getElementById('logStatus').textContent = 'Tamamlandı ✓';
+            document.getElementById('spinner').classList.remove('active');
+            appendLog('🏁 Tamamlandı!', 'ok');
+          } else {
+            appendLog('❌ Hata: ' + data.result, 'err');
+            document.getElementById('logStatus').textContent = 'Hata';
+            document.getElementById('spinner').classList.remove('active');
+          }
+          resetBtn();
+          loadSessions();
+        }
+      };
+      es.onerror = () => {
+        appendLog('⚠️ SSE bağlantısı kesildi, yeniden deneniyor...', 'err');
+        es.close();
+      };
+    }
+
+    function appendLog(text, cls = '') {
+      const body = document.getElementById('logBody');
+      const p = document.createElement('p');
+      if (cls) p.className = cls;
+      p.textContent = text;
+      body.appendChild(p);
+      body.scrollTop = body.scrollHeight;
+    }
+
+    function resetBtn() {
+      const btn = document.getElementById('runBtn');
+      btn.disabled = false;
+      btn.textContent = '▶ Çalıştır';
+    }
+
+    // ── Projects ───────────────────────────────────
+    async function loadProjects() {
+      const el = document.getElementById('projectsList');
+      el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:30px">Yükleniyor...</p>';
+      try {
+        const projects = await fetch(`${BASE}/projects`).then(r => r.json());
+        if (!projects.length) {
+          el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:40px">Henüz proje yok</p>';
+          return;
+        }
+        el.innerHTML = projects.map(p => `
+        <div class="project-card" onclick="showSummary('${p.name}')">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div class="project-name">${p.name}</div>
+            <a href="/download/${p.name}"
+              class="download-btn"
+              onclick="event.stopPropagation()"
+              style="
+                background: #22c55e;
+                color: white;
+                padding: 6px 14px;
+                border-radius: 6px;
+                text-decoration: none;
+                font-size: 13px;
+                font-weight: 600;
+              ">📦 ZIP İndir</a>
+          </div>
+          <div class="project-meta">
+            <span>📄 ${p.files} dosya</span>
+            ${p.has_summary ? '<span class="badge">RAPOR VAR</span>' : ''}
+          </div>
+        </div>
+      `).join('');
+      } catch (e) {
+        el.innerHTML = `<p style="color:var(--red);padding:20px">Hata: ${e.message}</p>`;
+      }
+    }
+
+    async function showSummary(slug) {
+      const data = await fetch(`${BASE}/project/${slug}/summary`).then(r => r.json());
+      document.getElementById('modalContent').textContent = data.summary;
+      document.getElementById('overlay').classList.add('show');
+    }
+
+    function closeModal() {
+      document.getElementById('overlay').classList.remove('show');
+    }
+
+    // ── Sessions ───────────────────────────────────
+    async function loadSessions() {
+      const el = document.getElementById('sessionsList');
+      try {
+        const sessions = await fetch(`${BASE}/sessions`).then(r => r.json());
+        if (!sessions.length) {
+          el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:40px">Henüz oturum yok</p>';
+          return;
+        }
+        el.innerHTML = sessions.reverse().map(s => `
+        <div class="session-row">
+          <div class="session-status ${s.status}"></div>
+          <div>
+            <div class="session-goal">${s.goal}</div>
+            <div class="session-id">#${s.session_id} · ${s.started_at?.slice(11, 19) || ''}</div>
+          </div>
+        </div>
+      `).join('');
+      } catch (e) {
+        el.innerHTML = `<p style="color:var(--red);padding:20px">Sunucuya bağlanılamadı</p>`;
+      }
+    }
+
+    // ── Health check ───────────────────────────────
+    async function checkHealth() {
+      try {
+        await fetch(`${BASE}/health`);
+        document.getElementById('statusDot').style.background = 'var(--green)';
+      } catch {
+        document.getElementById('statusDot').style.background = 'var(--red)';
+      }
+    }
+    checkHealth();
+    setInterval(checkHealth, 30000);
+  </script>
+</body>
+
+</html>
