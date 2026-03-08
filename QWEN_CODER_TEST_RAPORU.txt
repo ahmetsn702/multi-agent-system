@@ -1,0 +1,243 @@
+═══════════════════════════════════════════════════════════════════════════════
+  QWEN3-CODER FREE TEST RAPORU
+  Tarih: 02.03.2026 16:00
+  Model: qwen/qwen3-coder:free
+═══════════════════════════════════════════════════════════════════════════════
+
+❌ QWEN3-CODER FREE RATE LIMIT SORUNU!
+
+───────────────────────────────────────────────────────────────────────────────
+  TEST YAPILAN PROJE
+───────────────────────────────────────────────────────────────────────────────
+
+Proje 1: Python ile hesap makinesi yaz, 4 işlem olsun
+  ⏰ Tarih: 02.03.2026 16:00
+  🆔 Session: bab8f6af
+  
+  Görev Durumu:
+    ✅ [OK]   researcher: Araştırma tamamlandı
+    ❌ [HATA] coder: Rate limit! (3 deneme)
+    ⏭️ [ATLA] Diğer görevler test edilemedi
+    
+  Sonuç: 1/4 görev tamamlandı ❌
+  
+  Rate Limit Detayları:
+    🚫 [429] Rate limit! 5s bekleniyor...
+    🚫 [429] Rate limit! 10s bekleniyor...
+    🚫 [429] Rate limit! 20s bekleniyor...
+    🔄 3 deneme yapıldı, hepsi başarısız
+    
+  Oluşturulan Dosyalar:
+    ❌ Hiçbir dosya oluşturulamadı
+    
+  output.py Kontrolü:
+    ❓ Test edilemedi (kod üretilemedi)
+    
+  [FILE:] Format Hatası:
+    ❓ Test edilemedi (kod üretilemedi)
+    
+  Maliyet:
+    💰 $0.000410 USD (sadece planner + researcher)
+    📊 Token: ~4,000 (researcher için)
+    🔄 Iterasyon: 4 (timeout)
+    ⏱️ Süre: 3+ dakika (timeout)
+
+───────────────────────────────────────────────────────────────────────────────
+  QWEN3-CODER FREE DAVRANIŞI
+───────────────────────────────────────────────────────────────────────────────
+
+Gözlemler:
+
+1. Rate Limit Problemi:
+   - İlk coder çağrısında rate limit
+   - 5s, 10s, 20s bekleme
+   - 3 deneme yapıldı
+   - Hepsi rate limit ile başarısız
+   - Timeout oldu (3+ dakika)
+
+2. Free Model Kısıtlamaları:
+   - qwen/qwen3-coder:free çok kısıtlı
+   - Muhtemelen çok düşük rate limit
+   - Ücretsiz olduğu için kullanım sınırlı
+   - Production için uygun değil
+
+3. Sistem Davranışı:
+   - Rate limit algılandı
+   - Exponential backoff uygulandı (5s, 10s, 20s)
+   - 3 deneme sonunda task failed
+   - Timeout oldu
+
+4. Maliyet:
+   - Sadece planner ve researcher çalıştı
+   - Coder hiç çalışmadı
+   - Toplam: $0.000410 (çok düşük)
+
+───────────────────────────────────────────────────────────────────────────────
+  NEDEN BAŞARISIZ OLDU?
+───────────────────────────────────────────────────────────────────────────────
+
+Ana Neden: RATE LIMIT
+
+Free Model Sorunları:
+  1. Çok düşük rate limit
+  2. Belki dakikada 1-2 istek
+  3. Veya saatte sınırlı istek
+  4. Production kullanımı için uygun değil
+
+OpenRouter Free Tier:
+  - Free modeller genelde çok kısıtlı
+  - Rate limit çok düşük
+  - Burst traffic desteklemiyor
+  - Test için bile yetersiz
+
+Alternatif Çözümler:
+  1. Ücretli qwen/qwen3-coder kullan
+  2. Başka bir model kullan
+  3. Rate limit'i bekle (çok yavaş)
+
+───────────────────────────────────────────────────────────────────────────────
+  KARŞILAŞTIRMA: GROK-4-FAST vs QWEN3-CODER FREE
+───────────────────────────────────────────────────────────────────────────────
+
+Grok-4-Fast (x-ai/grok-4-fast):
+  ✅ Kod üretimi: Başarılı
+  ✅ Rate limit: Yok (veya çok yüksek)
+  ✅ Görev tamamlama: 5/6, 6/6
+  💰 Maliyet: $0.02-0.08
+  ⏱️ Hız: Hızlı (30-60 saniye)
+  🎯 Güvenilirlik: Yüksek
+
+Qwen3-Coder Free (qwen/qwen3-coder:free):
+  ❌ Kod üretimi: Test edilemedi
+  ❌ Rate limit: Çok düşük (5-20s bekleme)
+  ❌ Görev tamamlama: 1/4
+  💰 Maliyet: $0 (ama çalışmıyor)
+  ⏱️ Hız: Çok yavaş (timeout)
+  🎯 Güvenilirlik: Çok düşük
+
+Sonuç: Grok-4-Fast çok daha iyi!
+
+───────────────────────────────────────────────────────────────────────────────
+  DEEPSEEK vs QWEN3-CODER FREE KARŞILAŞTIRMASI
+───────────────────────────────────────────────────────────────────────────────
+
+DeepSeek (deepseek/deepseek-chat):
+  ❌ Kod üretimi: Başarısız (4-11 token)
+  ✅ Rate limit: Yok
+  ❌ Görev tamamlama: 2/4
+  💰 Maliyet: $0.006
+  ⏱️ Hız: Hızlı
+  🎯 Sorun: Kod üretemiyor
+
+Qwen3-Coder Free (qwen/qwen3-coder:free):
+  ❓ Kod üretimi: Test edilemedi
+  ❌ Rate limit: Çok düşük
+  ❌ Görev tamamlama: 1/4
+  💰 Maliyet: $0
+  ⏱️ Hız: Çok yavaş
+  🎯 Sorun: Rate limit
+
+Her İkisi de Başarısız:
+  - DeepSeek: Kod üretemiyor
+  - Qwen3-Coder Free: Rate limit
+  - İkisi de production için uygun değil
+
+───────────────────────────────────────────────────────────────────────────────
+  ÖNERİLER
+───────────────────────────────────────────────────────────────────────────────
+
+1. Grok-4-Fast Kullanmaya Devam Et:
+   ✅ Kanıtlanmış başarı
+   ✅ Rate limit yok
+   ✅ Hızlı ve güvenilir
+   ✅ Makul maliyet ($0.02-0.08)
+   ✅ 2M context window
+
+2. Ücretli Qwen3-Coder Dene:
+   ⚠️ qwen/qwen3-coder (ücretli)
+   ⚠️ Rate limit daha yüksek olabilir
+   ⚠️ Ama test edilmeli
+
+3. Alternatif Free Modeller:
+   ❌ Free modeller genelde kısıtlı
+   ❌ Rate limit çok düşük
+   ❌ Production için uygun değil
+
+4. Maliyet Optimizasyonu:
+   - Grok-4-Fast zaten makul ($0.02-0.08)
+   - Free modeller çalışmıyor
+   - Ücretli model kullanmak daha mantıklı
+
+───────────────────────────────────────────────────────────────────────────────
+  TEST SONUÇLARI ÖZETİ
+───────────────────────────────────────────────────────────────────────────────
+
+Test Edilen Proje Sayısı: 1/3 (diğerleri iptal edildi)
+
+Proje 1: Python Hesap Makinesi
+  ❌ Başarısız: 1/4 görev
+  ❌ Rate limit: 3 deneme başarısız
+  ❓ output.py ban: Test edilemedi
+  ❓ [FILE:] format: Test edilemedi
+  💰 Maliyet: $0.000410 (sadece planner+researcher)
+  ⏱️ Süre: 3+ dakika (timeout)
+
+Proje 2: Flask TODO API
+  ⏭️ Atlandı (rate limit sorunu)
+
+Proje 3: Dosya Boyutu Script
+  ⏭️ Atlandı (rate limit sorunu)
+
+───────────────────────────────────────────────────────────────────────────────
+  MODEL TEST SONUÇLARI KARŞILAŞTIRMASI
+───────────────────────────────────────────────────────────────────────────────
+
+Test 1: DeepSeek (deepseek/deepseek-chat)
+  ❌ Sonuç: Başarısız
+  🎯 Sorun: Kod üretemiyor (4-11 token)
+  💰 Maliyet: $0.006
+  📊 Görev: 2/4
+
+Test 2: Qwen3-Coder Free (qwen/qwen3-coder:free)
+  ❌ Sonuç: Başarısız
+  🎯 Sorun: Rate limit
+  💰 Maliyet: $0.000410
+  📊 Görev: 1/4
+
+Grok-4-Fast (x-ai/grok-4-fast) - Baseline:
+  ✅ Sonuç: Başarılı
+  🎯 Sorun: Yok
+  💰 Maliyet: $0.02-0.08
+  📊 Görev: 5/6, 6/6
+
+Kazanan: Grok-4-Fast! 🏆
+
+───────────────────────────────────────────────────────────────────────────────
+  SONUÇ
+───────────────────────────────────────────────────────────────────────────────
+
+❌ Qwen3-Coder Free coder agent için UYGUN DEĞİL!
+
+Sorunlar:
+  1. Rate limit çok düşük
+  2. 5-20s bekleme süreleri
+  3. 3 deneme başarısız
+  4. Timeout oluyor
+  5. Production için kullanılamaz
+
+Önerilen Aksiyon:
+  ✅ Grok-4-Fast kullanmaya devam et
+  ❌ Free modeller kullanma
+  ⚠️ Ücretli modelleri dene (gerekirse)
+
+Settings geri alındı:
+  coder: "qwen/qwen3-coder:free" → "x-ai/grok-4-fast"
+
+Final Karar:
+  🏆 Grok-4-Fast en iyi seçenek!
+  💰 Makul maliyet ($0.02-0.08)
+  ⚡ Hızlı ve güvenilir
+  ✅ Rate limit yok
+  🎯 Kanıtlanmış başarı
+
+═══════════════════════════════════════════════════════════════════════════════

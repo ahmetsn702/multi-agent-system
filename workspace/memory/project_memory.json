@@ -1,0 +1,20 @@
+{
+  "projects": {
+    "test-flask-jwt": {
+      "slug": "test-flask-jwt",
+      "goal": "Flask ile JWT authentication sistemi",
+      "created_at": "2026-03-02T21:35:40.263761",
+      "files": [],
+      "snippets": {},
+      "cost": 0.005,
+      "tasks_completed": 5,
+      "tags": [
+        "flask",
+        "jwt"
+      ],
+      "patterns_used": [],
+      "successful_approaches": "Token-based authentication uygulandı; 5 görev başarıyla tamamlandı; Yüksek kod kalitesi (Critic skoru: 8.5/10)"
+    }
+  },
+  "version": "1.0"
+}

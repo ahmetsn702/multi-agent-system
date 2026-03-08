@@ -1,0 +1,188 @@
+═══════════════════════════════════════════════════════════════════════════════
+  DEEPSEEK TEST RAPORU
+  Tarih: 02.03.2026 15:53
+  Model: deepseek/deepseek-chat
+═══════════════════════════════════════════════════════════════════════════════
+
+❌ DEEPSEEK CODER OLARAK UYGUN DEĞİL!
+
+───────────────────────────────────────────────────────────────────────────────
+  TEST YAPILAN PROJE
+───────────────────────────────────────────────────────────────────────────────
+
+Proje 1: Python ile hesap makinesi yaz, 4 işlem olsun
+  ⏰ Tarih: 02.03.2026 15:53
+  🆔 Session: fb815ebe
+  
+  Görev Durumu:
+    ✅ [OK]   researcher: Araştırma tamamlandı
+    ❌ [HATA] coder: calculator.py oluşturulamadı (3 deneme)
+    ❌ [HATA] coder: Kullanıcı arayüzü oluşturulamadı (3 deneme)
+    ✅ [OK]   executor: Script çalıştırıldı
+    
+  Sonuç: 2/4 görev tamamlandı ❌
+  
+  Oluşturulan Dosyalar:
+    - src/script.py ✅
+    - src/calculator.py ❌ (oluşturulamadı!)
+    
+  output.py Kontrolü:
+    ✅ output.py oluşturulmadı (script.py oluşturuldu)
+    
+  [FILE:] Format Hatası:
+    ❓ Bilinmiyor (kod üretilemediği için test edilemedi)
+    
+  Maliyet:
+    💰 $0.006135 USD
+    📊 Token: 43,306 (39,213 in / 4,093 out)
+    🔄 Iterasyon: 9
+
+───────────────────────────────────────────────────────────────────────────────
+  DEEPSEEK DAVRANIŞI
+───────────────────────────────────────────────────────────────────────────────
+
+Gözlemler:
+
+1. Kod Üretimi Başarısız:
+   - Coder agent 3 kez denedi
+   - Her seferinde çok az token döndü (4-11 token)
+   - Kod bloğu oluşturamadı
+   - Sadece kısa yanıtlar verdi
+
+2. Token Kullanımı:
+   Input Tokenları:
+     - 1. deneme: 1,791 token
+     - 2. deneme: 3,257 token
+     - 3. deneme: 3,320 token
+     
+   Output Tokenları:
+     - 1. deneme: 73 token
+     - 2. deneme: 4 token ❌
+     - 3. deneme: 6 token ❌
+     
+   Normal bir coder 500-2000 token döndürmeli!
+
+3. Retry Davranışı:
+   - Her başarısızlıkta retry yapıldı
+   - 3 deneme sonunda task failed
+   - Sistem devam etti (executor çalıştı)
+
+4. Maliyet:
+   - DeepSeek çok ucuz: $0.006135
+   - Ama hiç kod üretmedi
+   - Grok-4-Fast ile karşılaştırma:
+     * Grok: ~$0.02-0.04 (başarılı)
+     * DeepSeek: $0.006 (başarısız)
+
+───────────────────────────────────────────────────────────────────────────────
+  NEDEN BAŞARISIZ OLDU?
+───────────────────────────────────────────────────────────────────────────────
+
+Olası Nedenler:
+
+1. Model Uyumsuzluğu:
+   - DeepSeek chat modeli, code generation için optimize değil
+   - deepseek/deepseek-coder kullanılmalıydı
+   - Veya deepseek-v3 kullanılmalıydı
+
+2. Prompt Uyumsuzluğu:
+   - Coder agent'ın promptu DeepSeek için uygun olmayabilir
+   - DeepSeek farklı format bekliyor olabilir
+   - [FILE:] formatını anlamıyor olabilir
+
+3. Context Window:
+   - DeepSeek context'i yeterli mi?
+   - Önceki mesajları anlayamıyor olabilir
+
+4. API Problemi:
+   - OpenRouter üzerinden DeepSeek erişimi sorunlu olabilir
+   - Rate limit veya quota problemi
+
+───────────────────────────────────────────────────────────────────────────────
+  KARŞILAŞTIRMA: GROK-4-FAST vs DEEPSEEK
+───────────────────────────────────────────────────────────────────────────────
+
+Grok-4-Fast (Önceki Testler):
+  ✅ Kod üretimi: Başarılı
+  ✅ Dosya oluşturma: app.py, models.py, vb.
+  ✅ Görev tamamlama: 5/6, 6/6
+  💰 Maliyet: $0.02-0.08
+  📊 Output token: 500-2000
+  ⏱️ Hız: Orta
+
+DeepSeek (Bu Test):
+  ❌ Kod üretimi: Başarısız
+  ❌ Dosya oluşturma: Sadece script.py
+  ❌ Görev tamamlama: 2/4
+  💰 Maliyet: $0.006
+  📊 Output token: 4-11 ❌
+  ⏱️ Hız: Hızlı ama işe yaramaz
+
+Sonuç: Grok-4-Fast çok daha iyi!
+
+───────────────────────────────────────────────────────────────────────────────
+  ÖNERİLER
+───────────────────────────────────────────────────────────────────────────────
+
+1. DeepSeek Kullanma:
+   ❌ deepseek/deepseek-chat → Coder için uygun değil
+   ⚠️ deepseek/deepseek-coder → Denenebilir
+   ⚠️ deepseek/deepseek-v3 → Denenebilir
+
+2. Grok-4-Fast Kullanmaya Devam Et:
+   ✅ Kanıtlanmış başarı
+   ✅ 2M context window
+   ✅ Hızlı ve güvenilir
+   ✅ Makul maliyet
+
+3. Alternatif Modeller:
+   ✅ Qwen3-Coder-Next: Kod için optimize
+   ✅ Claude Sonnet: Yüksek kalite
+   ✅ GPT-4o: Güvenilir
+
+4. DeepSeek İçin Özel Prompt:
+   - Eğer DeepSeek kullanılacaksa
+   - Coder agent promptunu DeepSeek için optimize et
+   - Farklı format dene
+   - Daha basit talimatlar ver
+
+───────────────────────────────────────────────────────────────────────────────
+  TEST SONUÇLARI ÖZETİ
+───────────────────────────────────────────────────────────────────────────────
+
+Test Edilen Proje Sayısı: 1/3 (diğerleri iptal edildi)
+
+Proje 1: Python Hesap Makinesi
+  ❌ Başarısız: 2/4 görev
+  ❌ Kod üretimi: Başarısız
+  ✅ output.py ban: Çalıştı (script.py oluşturuldu)
+  ❓ [FILE:] format: Test edilemedi
+  💰 Maliyet: $0.006135
+
+Proje 2: Flask TODO API
+  ⏭️ Atlandı (DeepSeek başarısız olduğu için)
+
+Proje 3: Dosya Boyutu Script
+  ⏭️ Atlandı (DeepSeek başarısız olduğu için)
+
+───────────────────────────────────────────────────────────────────────────────
+  SONUÇ
+───────────────────────────────────────────────────────────────────────────────
+
+❌ DeepSeek/deepseek-chat coder agent için UYGUN DEĞİL!
+
+Sorunlar:
+  1. Kod üretemiyor (4-11 token output)
+  2. Görevleri tamamlayamıyor (2/4)
+  3. Retry'lar başarısız
+  4. Sistem çalışmıyor
+
+Önerilen Aksiyon:
+  ✅ Grok-4-Fast kullanmaya devam et
+  ✅ Veya Qwen3-Coder-Next dene
+  ❌ DeepSeek/deepseek-chat kullanma
+
+Settings geri alındı:
+  coder: "deepseek/deepseek-chat" → GROK_4_FAST
+
+═══════════════════════════════════════════════════════════════════════════════

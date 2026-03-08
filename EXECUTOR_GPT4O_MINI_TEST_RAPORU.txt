@@ -1,0 +1,90 @@
+====================================================================
+  EXECUTOR MODEL TEST RAPORU - GPT-4O-MINI
+  Tarih: 06.03.2026
+====================================================================
+
+TEST KOMUTU:
+python main.py "Flask ile basit hesap makinesi yaz, web arayüzü olsun"
+
+MODEL DEĞİŞİKLİĞİ:
+config/settings.py içinde executor modeli değiştirildi:
+  ÖNCE: "executor": {"model": GPT_OSS_120B, "provider": "openrouter"}
+  SONRA: "executor": {"model": "openai/gpt-4o-mini", "provider": "openrouter"}
+
+====================================================================
+  TEST SONUÇLARI
+====================================================================
+
+✅ EXECUTOR BAŞARILI
+  • Executor çalıştı ve görevi tamamladı
+  • Timeout ALMADI
+  • Parse hatası YOK
+
+EXECUTOR PERFORMANSI:
+  • Input tokens: 2,291
+  • Output tokens: 118
+  • Maliyet: $0.00041445
+  • Görev: run.py scriptini çalıştır ve uygulamanın başlatıldığını doğrula
+  • Durum: ✅ TAMAMLANDI
+
+GENEL PROJE DURUMU:
+  • Mod: Phased (3 faz)
+  • Tamamlanan görevler: 6/9
+  • Başarısız görevler: 3 (analyzer görevleri)
+  • Toplam token: 67,159 (54,801 in / 12,358 out)
+  • Toplam maliyet: $0.024816
+
+EXECUTOR ADIM SAYISI:
+  • 1 adımda tamamlandı (run.py çalıştırma)
+  • Timeout süresi: 180 saniye (sistem timeout'u, executor değil)
+  • Executor kendi timeout'u: YOK
+
+====================================================================
+  KARŞILAŞTIRMA: GPT-4O-MINI vs GPT_OSS_120B
+====================================================================
+
+GPT-4O-MINI:
+  ✅ Çalıştı ve tamamladı
+  ✅ Parse hatası yok
+  ✅ Timeout yok
+  • Token: 2,291 in / 118 out
+  • Maliyet: $0.00041445
+  • Fiyat: $0.15/$0.60 per 1M tokens
+
+GPT_OSS_120B (önceki):
+  ✅ Stabil ve test edilmiş
+  ✅ Parse hatası yok
+  ✅ Timeout yok
+  • Fiyat: $0.039/$0.19 per 1M tokens
+  • 3.8x DAHA UCUZ ($0.039 vs $0.15 input)
+  • 3.2x DAHA UCUZ ($0.19 vs $0.60 output)
+
+====================================================================
+  SONUÇ VE ÖNERİ
+====================================================================
+
+GPT-4O-MINI ÇALIŞIYOR ✅
+  • Executor görevi başarıyla tamamladı
+  • Timeout veya parse hatası yok
+  • Ancak GPT_OSS_120B'den 3-4x DAHA PAHALI
+
+ÖNERİ: GPT_OSS_120B KULLANMAYA DEVAM ET
+  • Hem stabil hem ucuz
+  • Test edilmiş ve güvenilir
+  • Maliyet optimizasyonu için en iyi seçenek
+
+NOT: Sistem timeout'u (180s) Executor'dan önce Analyzer ve Coder
+ajanlarının yavaş çalışması nedeniyle oluştu. Executor'ın kendisi
+hızlı çalıştı ve timeout almadı.
+
+====================================================================
+  MODEL ROUTING GERİ ALINMALI
+====================================================================
+
+Önerilen değişiklik:
+"executor": {"model": GPT_OSS_120B, "provider": "openrouter"}
+
+Sebep: GPT-4O-MINI çalışıyor ama 3-4x daha pahalı ve ek bir avantaj
+sağlamıyor. GPT_OSS_120B hem stabil hem ucuz.
+
+====================================================================

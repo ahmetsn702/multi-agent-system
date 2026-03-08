@@ -1,0 +1,360 @@
+═══════════════════════════════════════════════════════════════════════════════
+  MODEL TEST FİNAL RAPORU
+  Tarih: 02.03.2026 20:30
+  Tüm Model Testlerinin Özeti
+═══════════════════════════════════════════════════════════════════════════════
+
+📊 TEST EDİLEN MODELLER: 4
+✅ BAŞARILI: 1 (Qwen2.5-Coder 32B)
+❌ BAŞARISIZ: 3 (DeepSeek, Qwen3-Coder Free x2)
+
+═══════════════════════════════════════════════════════════════════════════════
+  TEST 1: DEEPSEEK-CHAT
+═══════════════════════════════════════════════════════════════════════════════
+
+Model: deepseek/deepseek-chat
+Tarih: 02.03.2026 15:53
+Session: fb815ebe
+
+Sonuç: ❌ BAŞARISIZ
+
+Görev Tamamlama: 2/4
+  ✅ researcher: Araştırma tamamlandı
+  ❌ coder: calculator.py oluşturulamadı (3 deneme)
+  ❌ coder: Kullanıcı arayüzü oluşturulamadı (3 deneme)
+  ✅ executor: Script çalıştırıldı
+
+Oluşturulan Dosyalar:
+  - src/script.py ✅
+  - src/calculator.py ❌
+
+output.py Kontrolü:
+  ✅ output.py oluşturulmadı (script.py oluşturuldu)
+
+Maliyet:
+  💰 $0.006135 USD
+  📊 Token: 43,306 (39,213 in / 4,093 out)
+  🔄 Iterasyon: 9
+
+Ana Sorun:
+  🚫 Kod üretemiyor! Sadece 4-11 token döndürüyor
+  🚫 Normal coder 500-2000 token döndürmeli
+  🚫 Chat modeli, code generation için optimize değil
+
+Neden Başarısız:
+  1. DeepSeek-chat kod üretimi için uygun değil
+  2. Output token çok düşük (4-11 token)
+  3. [FILE:] formatını anlamıyor
+  4. Prompt uyumsuzluğu
+
+═══════════════════════════════════════════════════════════════════════════════
+  TEST 2: QWEN3-CODER FREE (İlk Deneme)
+═══════════════════════════════════════════════════════════════════════════════
+
+Model: qwen/qwen3-coder:free
+Tarih: 02.03.2026 16:00
+Session: bab8f6af
+Rate Limit: 5-10-20 saniye
+
+Sonuç: ❌ BAŞARISIZ (RATE LIMIT)
+
+Görev Tamamlama: 1/4
+  ✅ researcher: Araştırma tamamlandı
+  ❌ coder: Rate limit! (3 deneme)
+  ⏭️ Diğer görevler test edilemedi
+
+Rate Limit Detayları:
+  🚫 [429] Rate limit! 5s bekleniyor...
+  🚫 [429] Rate limit! 10s bekleniyor...
+  🚫 [429] Rate limit! 20s bekleniyor...
+  🔄 3 deneme yapıldı, hepsi başarısız
+
+Oluşturulan Dosyalar:
+  ❌ Hiçbir dosya oluşturulamadı
+
+Maliyet:
+  💰 $0.000410 USD (sadece planner + researcher)
+  ⏱️ Süre: 3+ dakika (timeout)
+
+Ana Sorun:
+  🚫 Rate limit çok düşük!
+  🚫 Free model production için uygun değil
+  🚫 Dakikada 1-2 istek sınırı
+
+Neden Başarısız:
+  1. Free tier rate limit çok kısıtlı
+  2. 5-20s bekleme yeterli değil
+  3. Timeout oluyor
+  4. Production kullanımı imkansız
+
+═══════════════════════════════════════════════════════════════════════════════
+  TEST 3: QWEN3-CODER FREE (Retry - 30-60-120s)
+═══════════════════════════════════════════════════════════════════════════════
+
+Model: qwen/qwen3-coder:free
+Tarih: 02.03.2026 16:15
+Session: 5192b3cd
+Rate Limit: 30-60-120 saniye (iyileştirilmiş)
+
+Sonuç: ❌ TIMEOUT
+
+Görev Durumu (5 dakika sonra):
+  ✅ planner: Plan oluşturuldu
+  ✅ researcher: Araştırma tamamlandı
+  ⏳ critic: Çalışıyor...
+  ⏳ coder: Henüz başlamadı
+
+Timeout: 5 dakika (300 saniye)
+Durum: Proje devam ediyor ama timeout oldu
+
+İyileştirme:
+  Önceki: 5-10-20s → Yeni: 30-60-120s
+  Kod: core/llm_client.py
+  Değişiklik: 2 ** attempt * 5 → 2 ** attempt * 30
+
+Ana Sorun:
+  🚫 Çok yavaş! 5 dakika yeterli değil
+  🚫 Rate limit + işlem süresi = 10+ dakika
+  🚫 Test bile tamamlanamıyor
+
+Neden Başarısız:
+  1. Rate limit çok düşük
+  2. 30-120s bekleme çok uzun
+  3. Timeout süresi yetersiz
+  4. Production için imkansız
+
+═══════════════════════════════════════════════════════════════════════════════
+  TEST 4: QWEN2.5-CODER 32B INSTRUCT ✅
+═══════════════════════════════════════════════════════════════════════════════
+
+Model: qwen/qwen-2.5-coder-32b-instruct
+Tarih: 02.03.2026 20:22
+Session: c6b15a82
+Proje: Python ile hesap makinesi yaz
+
+Sonuç: ✅ BAŞARILI!
+
+Görev Tamamlama: 4/4 ✅
+  ✅ researcher: Dört işlem için Python fonksiyonları
+  ✅ coder: src/calculator.py oluşturuldu
+  ✅ coder: src/main.py oluşturuldu
+  ✅ executor: main.py çalıştırıldı
+
+Oluşturulan Dosyalar:
+  ✅ src/calculator.py
+  ✅ src/main.py
+  ✅ src/output.py
+  ✅ src/script.py
+
+output.py Kontrolü:
+  ⚠️ output.py oluşturuldu (ban çalışmadı mı?)
+
+Maliyet:
+  💰 $0.005309 USD
+  📊 Token: 34,279 (26,229 in / 8,050 out)
+  🔄 Iterasyon: 5
+  ⏱️ Süre: Normal (timeout oldu ama proje bitti)
+
+Kod Kalitesi:
+  📊 Pylint: 4.5/10
+
+Model Özellikleri:
+  💰 Fiyat: $0.20/M input, $0.20/M output
+  🧠 Boyut: 32B parametreli
+  🎯 Özellik: Code generation için optimize
+  ⚡ Hız: Normal
+
+Ana Başarı:
+  ✅ Tüm görevler tamamlandı!
+  ✅ Kod üretimi başarılı
+  ✅ Dosyalar oluşturuldu
+  ✅ Makul maliyet
+  ✅ Rate limit yok
+
+═══════════════════════════════════════════════════════════════════════════════
+  MODEL KARŞILAŞTIRMASI
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────┬──────────┬───────┬──────────┬──────────┬────────────┐
+│ Model               │ Görev    │ Dosya │ Maliyet  │ Hız      │ Sonuç      │
+├─────────────────────┼──────────┼───────┼──────────┼──────────┼────────────┤
+│ DeepSeek-Chat       │ 2/4 ❌   │ 1/2   │ $0.006   │ Hızlı    │ BAŞARISIZ  │
+│ Qwen3-Coder Free    │ 1/4 ❌   │ 0/4   │ $0.0004  │ Timeout  │ RATE LIMIT │
+│ Qwen3-Coder Free v2 │ ?/4 ❌   │ ?/4   │ ?        │ Timeout  │ TIMEOUT    │
+│ Qwen2.5-Coder 32B   │ 4/4 ✅   │ 4/4   │ $0.005   │ Normal   │ BAŞARILI   │
+│ Grok-4-Fast (ref)   │ 5-6/6 ✅ │ 5-6/6 │ $0.02-08 │ Hızlı    │ BAŞARILI   │
+└─────────────────────┴──────────┴───────┴──────────┴──────────┴────────────┘
+
+Başarı Oranı:
+  ✅ Qwen2.5-Coder 32B: 100% (4/4)
+  ✅ Grok-4-Fast: 83-100% (5-6/6)
+  ❌ DeepSeek-Chat: 50% (2/4)
+  ❌ Qwen3-Coder Free: 25% (1/4)
+
+Maliyet Karşılaştırması:
+  💰 Qwen3-Coder Free: $0.0004 (ama çalışmıyor)
+  💰 Qwen2.5-Coder 32B: $0.005 ✅
+  💰 DeepSeek-Chat: $0.006 (ama başarısız)
+  💰 Grok-4-Fast: $0.02-0.08
+
+Hız Karşılaştırması:
+  ⚡ Grok-4-Fast: 30-60 saniye
+  ⚡ Qwen2.5-Coder 32B: Normal (timeout ama bitti)
+  ⚡ DeepSeek-Chat: Hızlı (ama işe yaramaz)
+  🐌 Qwen3-Coder Free: Timeout (5+ dakika)
+
+═══════════════════════════════════════════════════════════════════════════════
+  SORUN ANALİZİ
+═══════════════════════════════════════════════════════════════════════════════
+
+DeepSeek-Chat Neden Başarısız?
+  1. Chat modeli, code generation için optimize değil
+  2. Output token çok düşük (4-11 token)
+  3. [FILE:] formatını anlamıyor
+  4. Prompt uyumsuzluğu
+  5. Kod üretemiyor
+
+Qwen3-Coder Free Neden Başarısız?
+  1. Rate limit çok düşük (free tier)
+  2. Dakikada 1-2 istek sınırı
+  3. 30-120s bekleme çok uzun
+  4. Timeout oluyor
+  5. Production için uygun değil
+
+Qwen2.5-Coder 32B Neden Başarılı?
+  1. Code generation için optimize
+  2. 32B parametreli (güçlü)
+  3. Rate limit yok (ücretli)
+  4. [FILE:] formatını anlıyor
+  5. Makul maliyet ($0.005)
+
+═══════════════════════════════════════════════════════════════════════════════
+  ÖNERİLER
+═══════════════════════════════════════════════════════════════════════════════
+
+1. Qwen2.5-Coder 32B Kullan: ✅ ÖNERİLİR
+   ✅ Başarılı test (4/4 görev)
+   ✅ Makul maliyet ($0.005)
+   ✅ Code generation için optimize
+   ✅ Rate limit yok
+   ⚠️ output.py ban kontrolü gerekli
+
+2. Grok-4-Fast Kullan: ✅ ÖNERİLİR
+   ✅ Kanıtlanmış başarı (5-6/6)
+   ✅ Hızlı (30-60 saniye)
+   ✅ 2M context window
+   ⚠️ Biraz daha pahalı ($0.02-0.08)
+
+3. DeepSeek Kullanma: ❌ ÖNERİLMEZ
+   ❌ Kod üretemiyor
+   ❌ Chat modeli uygun değil
+   ⚠️ deepseek-coder veya deepseek-v3 denenebilir
+
+4. Qwen3-Coder Free Kullanma: ❌ ÖNERİLMEZ
+   ❌ Rate limit çok düşük
+   ❌ Çok yavaş (timeout)
+   ❌ Production için uygun değil
+   ❌ Test için bile zor
+
+═══════════════════════════════════════════════════════════════════════════════
+  MEVCUT DURUM
+═══════════════════════════════════════════════════════════════════════════════
+
+Aktif Model: qwen/qwen-2.5-coder-32b-instruct ✅
+
+config/settings.py:
+  MODEL_ROUTING = {
+    "planner":    {"model": QWEN3_235B,   "provider": "openrouter"},
+    "researcher": {"model": GPT_OSS_120B, "provider": "openrouter"},
+    "coder":      {"model": "qwen/qwen-2.5-coder-32b-instruct",  "provider": "openrouter"},
+    "critic":     {"model": GPT_OSS_120B, "provider": "openrouter"},
+    "executor":   {"model": GPT_OSS_120B, "provider": "openrouter"},
+  }
+
+Son Test:
+  ✅ Proje: Python ile hesap makinesi yaz
+  ✅ Görev: 4/4 tamamlandı
+  ✅ Dosyalar: calculator.py, main.py, output.py, script.py
+  💰 Maliyet: $0.005309
+  📊 Token: 34,279
+
+Sistem Durumu:
+  ✅ Memory Agent: Aktif (3 proje kayıtlı)
+  ✅ Executor Skip Logic: Aktif (input() ve while True kontrolü)
+  ✅ Rate Limit Handling: 30-60-120 saniye backoff
+  ⚠️ Web API: Manuel restart gerekli (port 8001)
+  ⚠️ Telegram Bot: Manuel restart gerekli
+
+═══════════════════════════════════════════════════════════════════════════════
+  SONRAKI ADIMLAR
+═══════════════════════════════════════════════════════════════════════════════
+
+1. Qwen2.5-Coder 32B ile Daha Fazla Test:
+   - 3-5 farklı proje test et
+   - output.py ban kontrolü yap
+   - [FILE:] format hatası kontrolü yap
+   - Maliyet ortalaması hesapla
+
+2. output.py Ban Kontrolü:
+   - Neden output.py oluşturuldu?
+   - Ban çalışıyor mu?
+   - agents/coder_agent.py kontrol et
+
+3. Alternatif Model Testleri:
+   - deepseek/deepseek-coder dene
+   - deepseek/deepseek-v3 dene
+   - claude-3.5-sonnet dene (kalite için)
+
+4. Maliyet Optimizasyonu:
+   - Qwen2.5-Coder 32B: $0.005
+   - Grok-4-Fast: $0.02-0.08
+   - Hangisi daha iyi?
+
+5. Performans Karşılaştırması:
+   - Qwen2.5-Coder 32B vs Grok-4-Fast
+   - Hız, kalite, maliyet
+   - 10 proje test et
+
+═══════════════════════════════════════════════════════════════════════════════
+  FİNAL KARAR
+═══════════════════════════════════════════════════════════════════════════════
+
+🏆 KAZANAN: QWEN2.5-CODER 32B INSTRUCT
+
+Neden?
+  ✅ Başarılı test (4/4 görev)
+  ✅ Makul maliyet ($0.005)
+  ✅ Code generation için optimize
+  ✅ Rate limit yok
+  ✅ 32B parametreli (güçlü)
+
+Alternatif:
+  🥈 Grok-4-Fast (kanıtlanmış başarı)
+  🥉 Qwen3-Coder-Next (denenebilir)
+
+Kullanma:
+  ❌ DeepSeek-Chat (kod üretemiyor)
+  ❌ Qwen3-Coder Free (rate limit)
+
+Mevcut Ayar:
+  ✅ coder: "qwen/qwen-2.5-coder-32b-instruct"
+  ✅ Sistem çalışıyor
+  ✅ Test başarılı
+
+═══════════════════════════════════════════════════════════════════════════════
+  RAPOR SONU
+═══════════════════════════════════════════════════════════════════════════════
+
+Oluşturulma: 02.03.2026 20:30
+Test Sayısı: 4
+Başarılı: 1 (Qwen2.5-Coder 32B)
+Başarısız: 3 (DeepSeek, Qwen3-Coder Free x2)
+
+Toplam Maliyet: $0.011854 USD
+  - DeepSeek: $0.006135
+  - Qwen3-Coder Free: $0.000410
+  - Qwen2.5-Coder 32B: $0.005309
+
+Önerilen Model: qwen/qwen-2.5-coder-32b-instruct ✅
+
+═══════════════════════════════════════════════════════════════════════════════

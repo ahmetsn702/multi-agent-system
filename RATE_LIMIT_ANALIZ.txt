@@ -1,0 +1,275 @@
+═══════════════════════════════════════════════════════════════════════════════
+  RATE LIMIT ANALİZİ
+  Tarih: 02.03.2026
+═══════════════════════════════════════════════════════════════════════════════
+
+SORU: Rate limit durumunda kaç saniye bekleniyor?
+      Test 2 ve Test 3'te rate limit sorunu var mı?
+
+───────────────────────────────────────────────────────────────────────────────
+  LLM_CLIENT.PY RATE LIMIT MEKANIZMASI
+───────────────────────────────────────────────────────────────────────────────
+
+1. RATE LIMITER SINIFI (Satır 62-76):
+
+   class RateLimiter:
+       def __init__(self, max_requests: int = 50, window_seconds: int = 10):
+           self.max_requests = max_requests
+           self.window_seconds = window_seconds
+           self.requests = deque()
+
+       async def acquire(self):
+           now = time.time()
+           while self.requests and now - self.requests[0] > self.window_seconds:
+               self.requests.popleft()
+
+           if len(self.requests) >= self.max_requests:
+               wait_time = self.window_seconds - (now - self.requests[0]) + 1
+               print(f"[RATE LIMIT] {wait_time:.1f}s bekleniyor...")
+               await asyncio.sleep(wait_time)
+
+           self.requests.append(time.time())
+
+   AYARLAR:
+   - max_requests: 50 istek
+   - window_seconds: 10 saniye
+   - Limit: 10 saniye içinde 50 istek
+
+   BEKLEME SÜRESİ:
+   - Formula: wait_time = window_seconds - (now - self.requests[0]) + 1
+   - Maksimum: 10 + 1 = 11 saniye
+   - Minimum: 1 saniye
+   - Ortalama: ~5-6 saniye
+
+   LOG MESAJI:
+   - "[RATE LIMIT] {wait_time:.1f}s bekleniyor..."
+
+2. 429 RATE LIMIT HATASI (Satır 177-181):
+
+   except httpx.HTTPStatusError as e:
+       if e.response.status_code == 429:
+           wait_str = e.response.headers.get("Retry-After")
+           wait = int(wait_str) if wait_str else 2 ** attempt * 30
+           print(f"[429] Rate limit! {wait}s bekleniyor...")
+           await asyncio.sleep(wait)
+
+   BEKLEME SÜRESİ:
+   - Retry-After header varsa: Header'daki süre
+   - Yoksa: Exponential backoff
+     * Attempt 0: 2^0 * 30 = 30 saniye
+     * Attempt 1: 2^1 * 30 = 60 saniye
+     * Attempt 2: 2^2 * 30 = 120 saniye
+
+   LOG MESAJI:
+   - "[429] Rate limit! {wait}s bekleniyor..."
+
+3. GENEL RETRY MEKANIZMASI (Satır 183-191):
+
+   elif attempt < MAX_RETRIES - 1:
+       wait = 2 ** attempt
+       await asyncio.sleep(wait)
+
+   BEKLEME SÜRESİ:
+   - Attempt 0: 2^0 = 1 saniye
+   - Attempt 1: 2^1 = 2 saniye
+   - Attempt 2: 2^2 = 4 saniye
+
+   LOG MESAJI: YOK (sessiz retry)
+
+───────────────────────────────────────────────────────────────────────────────
+  TEST 2 LOG ANALİZİ
+───────────────────────────────────────────────────────────────────────────────
+
+KOMUT: python main.py "Python ile hesap makinesi yaz" (2. kez)
+
+LOG TARAMASI:
+  ❌ "[RATE LIMIT]" logu BULUNAMADI
+  ❌ "[429]" logu BULUNAMADI
+  ❌ "bekleniyor" logu BULUNAMADI
+  ❌ "waiting" logu BULUNAMADI
+
+SONUÇ:
+  ✅ Rate limit sorunu YOK
+  ✅ API istekleri normal hızda işlendi
+  ⚠️  Timeout başka bir nedenden kaynaklanıyor
+
+OLASI NEDENLER:
+  1. Critic feedback loop çok uzun sürüyor
+  2. LLM yanıt süreleri uzun (model yavaş)
+  3. Ağ gecikmeleri
+  4. Çok fazla iterasyon (>10)
+
+───────────────────────────────────────────────────────────────────────────────
+  TEST 3 LOG ANALİZİ
+───────────────────────────────────────────────────────────────────────────────
+
+KOMUT: python main.py "Flask ile basit TODO API yaz"
+
+LOG TARAMASI:
+  ❌ "[RATE LIMIT]" logu BULUNAMADI
+  ❌ "[429]" logu BULUNAMADI
+  ❌ "bekleniyor" logu BULUNAMADI
+  ❌ "waiting" logu BULUNAMADI
+
+SONUÇ:
+  ✅ Rate limit sorunu YOK
+  ✅ API istekleri normal hızda işlendi
+  ⚠️  Timeout başka bir nedenden kaynaklanıyor
+
+OLASI NEDENLER:
+  1. Phased execution (2 faz, 8 task)
+  2. Executor retry (3 kez SyntaxError)
+  3. Critic feedback loop
+  4. Çok fazla LLM çağrısı (her task için 3-5 çağrı)
+
+───────────────────────────────────────────────────────────────────────────────
+  TIMEOUT NEDENİ ANALİZİ
+───────────────────────────────────────────────────────────────────────────────
+
+RATE LIMIT DEĞİL, PEKI NE?
+
+1. CRITIC FEEDBACK LOOP:
+   Test 2 Log:
+   - "[COST] critic | openai/gpt-oss-120b | in:1240 out:600"
+   - "[COST] critic | openai/gpt-oss-120b | in:1333 out:301"
+   - 2 Critic çağrısı görüldü (muhtemelen daha fazla var)
+   
+   Test 3 Log:
+   - "[COST] critic | openai/gpt-oss-120b | in:1078 out:600"
+   - "[COST] critic | openai/gpt-oss-120b | in:1163 out:600"
+   - "[COST] critic | openai/gpt-oss-120b | in:1103 out:600"
+   - "[COST] critic | openai/gpt-oss-120b | in:1170 out:234"
+   - 4+ Critic çağrısı görüldü
+   
+   SORUN: Critic her seferinde 600 token output üretiyor (max)
+          Bu çok uzun sürüyor (~10-15 saniye per çağrı)
+
+2. EXECUTOR RETRY:
+   Test 3 Log:
+   - "[Executor] ❌ Hata tespit edildi: SyntaxError → Coder'a iletiliyor"
+   - "🔄 Task p1_t3 retrying (attempt 1)"
+   - "🔄 Task p1_t3 retrying (attempt 2)"
+   - "❌ Task p1_t3 failed after 3 attempts"
+   
+   SORUN: 3 kez retry yapıldı, her biri ~30 saniye
+          Toplam: ~90 saniye sadece bu task için
+
+3. ÇOK FAZLA LLM ÇAĞRISI:
+   Test 3 için toplam LLM çağrısı sayısı:
+   - Planner: 3 çağrı
+   - Researcher: 3 çağrı (her faz için)
+   - Coder: 6+ çağrı (her task için 2-3 çağrı)
+   - Critic: 6+ çağrı (her task için 1-2 çağrı)
+   - Executor: 3+ çağrı
+   - Tester: 2 çağrı
+   - Linter: 2 çağrı
+   
+   TOPLAM: ~25-30 LLM çağrısı
+   Ortalama süre: 5-10 saniye per çağrı
+   Toplam süre: 125-300 saniye (2-5 dakika)
+
+4. PHASED EXECUTION:
+   Test 3 Log:
+   - "📦 [1/2] Veritabani Katmani başlıyor — 3 görev"
+   - "📦 [2/2] API Katmani başlıyor — 5 görev"
+   
+   SORUN: Fazlar sıralı çalışıyor (Faz 2, Faz 1 bitmeden başlamıyor)
+          Her faz ~2-3 dakika sürüyor
+          Toplam: ~4-6 dakika
+
+───────────────────────────────────────────────────────────────────────────────
+  TIMEOUT ÇÖZÜMÜ
+───────────────────────────────────────────────────────────────────────────────
+
+SORUN: Rate limit değil, genel süreç yavaşlığı
+
+ÇÖZÜM 1: TIMEOUT SÜRESİNİ ARTIR
+  Mevcut: 300,000ms (5 dakika)
+  Önerilen: 600,000ms (10 dakika)
+  
+  Değişiklik:
+  - executePwsh timeout parametresini 600000'e çıkar
+
+ÇÖZÜM 2: CRITIC MAX_TOKENS'I AZALT
+  Mevcut: 600 token output
+  Önerilen: 300 token output
+  
+  Değişiklik:
+  - critic_agent.py içinde max_tokens=600 → max_tokens=300
+
+ÇÖZÜM 3: CRITIC MAX_ITERATIONS'I AZALT
+  Mevcut: 3 iterasyon
+  Önerilen: 2 iterasyon
+  
+  Değişiklik:
+  - orchestrator.py içinde max_iterations = 3 → max_iterations = 2
+
+ÇÖZÜM 4: EXECUTOR MAX_ATTEMPTS'I AZALT
+  Mevcut: 3 attempt
+  Önerilen: 2 attempt
+  
+  Değişiklik:
+  - orchestrator.py içinde max_attempts = 3 → max_attempts = 2
+
+ÇÖZÜM 5: LLM TIMEOUT EKLE
+  Mevcut: 120 saniye (httpx timeout)
+  Önerilen: 60 saniye
+  
+  Değişiklik:
+  - llm_client.py içinde timeout=120.0 → timeout=60.0
+
+───────────────────────────────────────────────────────────────────────────────
+  RATE LIMIT AYARLARI ÖNERİSİ
+───────────────────────────────────────────────────────────────────────────────
+
+MEVCUT AYARLAR:
+  - max_requests: 50 istek
+  - window_seconds: 10 saniye
+  - Limit: 10 saniye içinde 50 istek (5 istek/saniye)
+
+BU AYARLAR YETERLI Mİ?
+
+Test 3 için hesaplama:
+  - Toplam LLM çağrısı: ~25-30
+  - Toplam süre: ~5 dakika = 300 saniye
+  - Ortalama: 25 / 300 = 0.083 istek/saniye
+  
+  Limit: 5 istek/saniye
+  Gerçek: 0.083 istek/saniye
+  
+  ✅ Rate limit hiç tetiklenmedi (çok altında)
+
+SONUÇ:
+  ✅ Mevcut rate limit ayarları FAZLASIYLA yeterli
+  ✅ Rate limit sorunu YOK
+  ⚠️  Timeout başka nedenlerden kaynaklanıyor
+
+───────────────────────────────────────────────────────────────────────────────
+  SONUÇ
+───────────────────────────────────────────────────────────────────────────────
+
+RATE LIMIT BEKLEME SÜRELERİ:
+  1. RateLimiter: 1-11 saniye (ortalama 5-6 saniye)
+  2. 429 Error: 30-120 saniye (exponential backoff)
+  3. Genel Retry: 1-4 saniye
+
+TEST 2 VE TEST 3:
+  ❌ Rate limit logu BULUNAMADI
+  ✅ Rate limit sorunu YOK
+  ✅ API istekleri normal hızda işlendi
+
+TIMEOUT NEDENİ:
+  1. Critic feedback loop (çok uzun)
+  2. Executor retry (3 kez, ~90 saniye)
+  3. Çok fazla LLM çağrısı (25-30 çağrı)
+  4. Phased execution (fazlar sıralı)
+  5. Her LLM çağrısı 5-10 saniye sürüyor
+
+ÖNERİLEN ÇÖZÜMLER:
+  1. Timeout süresini 10 dakikaya çıkar
+  2. Critic max_tokens'ı 300'e düşür
+  3. Critic max_iterations'ı 2'ye düşür
+  4. Executor max_attempts'ı 2'ye düşür
+  5. LLM timeout'u 60 saniyeye düşür
+
+═══════════════════════════════════════════════════════════════════════════════

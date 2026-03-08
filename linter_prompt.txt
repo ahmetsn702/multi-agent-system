@@ -1,0 +1,223 @@
+Sen kıdemli bir Python mühendisisin. Çalışan bir Multi-Agent sistemine
+Linter entegrasyonu ekleyeceksin. Sıfırdan yazma, sadece belirtileni ekle.
+════════════════════════════════════════════════════════════
+                   MEVCUT SİSTEM
+════════════════════════════════════════════════════════════
+TesterAgent zaten var → agents/tester_agent.py
+Orchestrator Tester'ı Coder'dan sonra çalıştırıyor
+Workspace: workspace/projects/{slug}/src/
+════════════════════════════════════════════════════════════
+        ADIM 1: LINTER AGENT
+════════════════════════════════════════════════════════════
+YENİ DOSYA: agents/linter_agent.py
+"""
+LinterAgent: Üretilen kodu pylint + flake8 ile analiz eder.
+Skoru Critic'e bildirir, ciddi hataları Coder'a gönderir.
+"""
+import subprocess
+import sys
+from pathlib import Path
+from core.base_agent import BaseAgent, Task, AgentResponse
+class LinterAgent(BaseAgent):
+   def __init__(self, llm_client=None):
+       super().__init__(
+           agent_id="linter",
+           name="Linter Ajanı",
+           llm_client=llm_client,
+       )
+   async def think(self, task: Task):
+       pass  # LLM kullanmıyor
+   async def act(self, task: Task) -> AgentResponse:
+       context = task.context or {}
+       project_slug = context.get("project_slug", "default")
+       project_root = Path("workspace/projects") / project_slug
+       src_dir = project_root / "src"
+       if not src_dir.exists():
+           return AgentResponse(
+               success=True,
+               content={"error": "src/ klasörü bulunamadı", "score": 0},
+           )
+       py_files = [f for f in src_dir.glob("*.py") if f.name != ".gitkeep"]
+       if not py_files:
+           return AgentResponse(
+               success=True,
+               content={"message": "Python dosyası bulunamadı", "score": 10},
+           )
+       results = {}
+       # ── flake8 ──────────────────────────────────────────
+       try:
+           flake8_result = subprocess.run(
+               [sys.executable, "-m", "flake8",
+                str(src_dir),
+                "--max-line-length=100",
+                "--statistics",
+                "--count"],
+               capture_output=True, text=True, timeout=30,
+               cwd=str(project_root),
+           )
+           flake8_output = flake8_result.stdout + flake8_result.stderr
+           flake8_errors = len([l for l in flake8_output.splitlines() if 
+l.strip() and not l.strip().isdigit()])
+           results["flake8"] = {
+               "errors": flake8_errors,
+               "output": flake8_output[:1000],
+               "passed": flake8_errors == 0,
+           }
+       except FileNotFoundError:
+           # flake8 yüklü değil, yükle
+           subprocess.run([sys.executable, "-m", "pip", "install", "flake8", "-
+q"],
+                         capture_output=True, timeout=60)
+           results["flake8"] = {"errors": 0, "output": "flake8 yüklendi", 
+"passed": True}
+       except Exception as e:
+           results["flake8"] = {"errors": 0, "output": str(e), "passed": True}
+       # ── pylint ──────────────────────────────────────────
+       try:
+           pylint_result = subprocess.run(
+               [sys.executable, "-m", "pylint",
+                str(src_dir),
+                "--output-format=text",
+                "--score=yes",
+                "--disable=C0114,C0115,C0116",  # Docstring uyarılarını atla
+                "--max-line-length=100"],
+               capture_output=True, text=True, timeout=30,
+               cwd=str(project_root),
+           )
+           pylint_output = pylint_result.stdout
+           # Skoru parse et: "Your code has been rated at 7.50/10"
+           score = 0.0
+           for line in pylint_output.splitlines():
+               if "rated at" in line:
+                   try:
+                       score = float(line.split("rated at")[1].split("/")
+[0].strip())
+                   except Exception:
+                       pass
+           results["pylint"] = {
+               "score": score,
+               "output": pylint_output[:1000],
+               "passed": score >= 7.0,
+           }
+       except FileNotFoundError:
+           subprocess.run([sys.executable, "-m", "pip", "install", "pylint", "-
+q"],
+                         capture_output=True, timeout=60)
+           results["pylint"] = {"score": 8.0, "output": "pylint yüklendi", 
+"passed": True}
+       except Exception as e:
+           results["pylint"] = {"score": 8.0, "output": str(e), "passed": True}
+       # ── Genel skor hesapla ───────────────────────────────
+       pylint_score = results.get("pylint", {}).get("score", 8.0)
+       flake8_errors = results.get("flake8", {}).get("errors", 0)
+       flake8_penalty = min(flake8_errors * 0.5, 3.0)
+       final_score = max(0.0, pylint_score - flake8_penalty)
+       # Ciddi hatalar var mı?
+       critical_issues = []
+       flake8_out = results.get("flake8", {}).get("output", "")
+       for line in flake8_out.splitlines():
+           if any(code in line for code in ["E1", "E2", "E7", "E9", "F8"]):
+               critical_issues.append(line.strip())
+       passed = final_score >= 6.0 and len(critical_issues) == 0
+       summary = f"Pylint: {pylint_score:.1f}/10 | Flake8: {flake8_errors} hata | 
+Final: {final_score:.1f}/10"
+       print(f"[Linter] {summary}")
+       if critical_issues:
+           print(f"[Linter] 
+ {len(critical_issues)} kritik hata")
+           for issue in critical_issues[:3]:
+               print(f"[Linter]   {issue}")
+       return AgentResponse(
+           success=passed,
+           content={
+               "summary": summary,
+               "pylint_score": pylint_score,
+               "flake8_errors": flake8_errors,
+               "final_score": final_score,
+               "critical_issues": critical_issues,
+               "passed": passed,
+               "details": results,
+           },
+       )
+════════════════════════════════════════════════════════════
+        ADIM 2: ORCHESTRATOR ENTEGRASYONU
+════════════════════════════════════════════════════════════
+DOSYA: core/orchestrator.py
+1. Import ekle:
+  from agents.linter_agent import LinterAgent
+2. __init__ içinde:
+  self.linter = LinterAgent()
+3. _react_loop içinde TesterAgent'tan SONRA Linter çalıştır:
+  # Tester bittikten sonra:
+  print("[Orchestrator] Kod kalitesi kontrol ediliyor...")
+  lint_task = Task(
+      task_id=f"lint_{task.task_id}",
+      description=f"{task.task_id} lint kontrolü",
+      assigned_to="linter",
+      context={"project_slug": self.current_project_slug},
+  )
+  lint_result = await self.linter.act(lint_task)
+  lint_data = lint_result.content if isinstance(lint_result.content, dict) else 
+{}
+  # Kritik hata varsa Coder'a geri gönder
+  if not lint_result.success and lint_data.get("critical_issues"):
+      issues_text = "\n".join(lint_data["critical_issues"][:5])
+      task.context["lint_issues"] = issues_text
+      task.context["lint_score"] = lint_data.get("final_score", 0)
+      print(f"[Orchestrator] 
+ Lint skoru düşük ({lint_data.get('final_score', 
+0):.1f}/10), Coder'a gönderiliyor")
+      record.status = TaskStatus.PENDING
+      record.retry_count += 1
+  else:
+      print(f"[Orchestrator] 
+ Lint: {lint_data.get('summary', '')}")
+  # Skoru session raporuna ekle
+  self._session_lint_score = lint_data.get("final_score", 0)
+4. Coder'ın system prompt'una ekle:
+  "context içinde 'lint_issues' varsa önce o hataları düzelt.
+   Özellikle E9 (syntax), F8 (undefined name) hatalarını kesinlikle çöz."
+5. Session sonunda raporu güncelle (project_summary.txt):
+  lint_score = getattr(self, '_session_lint_score', 'N/A')
+  summary_content += f"\nKod Kalitesi (Pylint): {lint_score}/10"
+════════════════════════════════════════════════════════════
+        ADIM 3: WEB ARAYÜZÜNE SKOR GÖSTER
+════════════════════════════════════════════════════════════
+DOSYA: api/static/index.html
+Proje kartına lint skoru ekle. Mevcut proje listesinde
+her projenin yanında pylint skoru göster:
+<!-- Proje kartında: -->
+<span style="
+ background: {scoreColor};
+ color: white;
+ padding: 2px 8px;
+ border-radius: 4px;
+ font-size: 12px;
+ font-weight: 600;
+">
+ Kalite: {pylint_score}/10
+</span>
+<!-- scoreColor mantığı (JS): -->
+function scoreColor(score) {
+   if (score >= 8) return '#22c55e';  // yeşil
+   if (score >= 6) return '#f59e0b';  // sarı
+   return '#ef4444';                   // kırmızı
+}
+════════════════════════════════════════════════════════════
+                  UYGULAMA SIRASI
+════════════════════════════════════════════════════════════
+ Adım 1: agents/linter_agent.py → YENİ DOSYA oluştur
+ Adım 2: core/orchestrator.py → LinterAgent ekle
+ Adım 3: api/static/index.html → Skor göster (opsiyonel)
+════════════════════════════════════════════════════════════
+                     TEST
+════════════════════════════════════════════════════════════
+python main.py "Python ile hesap makinesi yaz"
+Çıktıda şunlar görünmeli:
+ [Linter] Pylint: 7.5/10 | Flake8: 2 hata | Final: 6.5/10
+ [Orchestrator] 
+ Lint kontrolü geçti
+workspace/projects/{slug}/project_summary.txt içinde:
+ Kod Kalitesi (Pylint): 6.5/10
+Mevcut çalışan sistemi bozma.
+flake8 ve pylint yüklü değilse otomatik yükler.

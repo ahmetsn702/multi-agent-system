@@ -1,0 +1,71 @@
+# Executables and installers
+*.exe
+*.msi
+
+# Office / personal documents
+*.doc
+*.docx
+
+# Images / media (personal)
+*.jpeg
+*.jpg
+*.png
+*.gif
+*.bmp
+
+# PDFs
+*.pdf
+
+# Archives/zips
+*.zip
+*.rar
+*.7z
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+venv/
+env/
+.venv/
+.env/
+
+# Environment variables / secrets
+.env
+*.env
+config_local.py
+
+# IDE / editor
+.vscode/settings.json
+*.resolved
+
+# Logs and temp
+*.log
+logs/
+tmp/
+temp/
+
+# OS generated
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node modules (if any frontend)
+node_modules/
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+
+# Test outputs / screenshots in workspace (large)
+multi_agent_system/workspace/screenshots/
+multi_agent_system/workspace/sandbox/
+
+# Large data files
+*.sqlite
+*.db

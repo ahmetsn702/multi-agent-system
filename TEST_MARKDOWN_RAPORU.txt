@@ -1,0 +1,201 @@
+═══════════════════════════════════════════════════════════════════════════════
+  MARKDOWN FORMAT DÜZELTME TEST RAPORU
+  Tarih: 02.03.2026
+  Komut: python main.py "Python ile hesap makinesi yaz"
+═══════════════════════════════════════════════════════════════════════════════
+
+YAPILAN DEĞİŞİKLİK:
+
+Dosya: multi_agent_system/agents/coder_agent.py
+Metod: act() - Syntax fix prompt
+
+Eklenen:
+```
+f"ÖNEMLİ FORMAT KURALI:\n"
+f"SADECE Python kodu döndür.\n"
+f"Başında ```python veya ``` OLMASIN.\n"
+f"Düz kod döndür, başka hiçbir şey yok.\n"
+f"Markdown formatı kullanma!"
+```
+
+───────────────────────────────────────────────────────────────────────────────
+  TEST SONUÇLARI
+───────────────────────────────────────────────────────────────────────────────
+
+DURUM: ❌ BAŞARISIZ
+
+SYNTAX HATALARI:
+
+Task 2 (calculator.py):
+  - ❌ Syntax hatası tespit edildi: if b == :
+  - 🔄 Düzeltme denemesi 1/2: Başarısız (if b == :)
+  - 🔄 Düzeltme denemesi 2/2: Başarısız (if b == :)
+  - ⚠️ UYARI: Syntax hatası düzeltilemedi
+
+Task 3 (main.py):
+  - ❌ Syntax hatası tespit edildi: [FILE:main.py]
+  - 🔄 Düzeltme denemesi 1/2: Başarısız (sys.path.insert(, ...))
+  - 🔄 Düzeltme denemesi 2/2: Başarısız (sys.path.insert(, ...))
+  - ⚠️ UYARI: Syntax hatası düzeltilemedi
+
+FINAL DOSYA KONTROLÜ:
+
+calculator.py (satır 69):
+```python
+if b == :  # ❌ HATA: Değer eksik
+    raise ValueError("Bölen sıfır olamaz.")
+```
+
+Doğrusu:
+```python
+if b == 0:  # ✅ DOĞRU
+    raise ValueError("Bölen sıfır olamaz.")
+```
+
+───────────────────────────────────────────────────────────────────────────────
+  NEDEN BAŞARISIZ OLDU?
+───────────────────────────────────────────────────────────────────────────────
+
+SORUN 1: LLM PROMPT'U GÖRMEZDEN GELİYOR
+  - Markdown uyarısı eklendi ama LLM yine aynı hatayı yapıyor
+  - "if b == :" hatası 2 kez düzeltme denemesinde de devam ediyor
+  - LLM syntax hatasını anlayamıyor veya düzeltemiyor
+
+SORUN 2: DÜZELTME PROMPT'U YETERSİZ
+  - Prompt'ta "if b == :" örneği var ama LLM uygulamıyor
+  - LLM orijinal hatayı tekrarlıyor
+  - Düzeltme prompt'u yeterince spesifik değil
+
+SORUN 3: LLM MODEL SORUNU
+  - qwen-2.5-coder-32b-instruct modeli syntax düzeltmede başarısız
+  - Aynı hatayı 2 kez tekrarlıyor
+  - Model syntax hatasını algılayamıyor
+
+───────────────────────────────────────────────────────────────────────────────
+  KARŞILAŞTIRMA: ÖNCE vs SONRA
+───────────────────────────────────────────────────────────────────────────────
+
+┌──────────────────────┬─────────────────┬─────────────────┬──────────────┐
+│ METRİK               │ ÖNCE (Final)    │ SONRA (Markdown)│ FARK         │
+├──────────────────────┼─────────────────┼─────────────────┼──────────────┤
+│ Markdown Uyarısı     │ YOK             │ VAR             │ ✅ Eklendi   │
+│ calculator.py Hata   │ VAR (if b == :) │ VAR (if b == :) │ ❌ Devam     │
+│ main.py Hata         │ VAR             │ VAR             │ ❌ Devam     │
+│ Düzeltme Başarı      │ %50 (1/2)       │ %0 (0/2)        │ ❌ Kötüleşti │
+│ Token                │ 33,928          │ 52,763          │ %55 ↑        │
+│ Maliyet              │ $0.0057         │ $0.0089         │ %56 ↑        │
+└──────────────────────┴─────────────────┴─────────────────┴──────────────┘
+
+───────────────────────────────────────────────────────────────────────────────
+  DETAYLI ANALİZ
+───────────────────────────────────────────────────────────────────────────────
+
+NEDEN KÖTÜLEŞTI:
+
+1. ÖNCEKI TESTTE (Final):
+   - calculator.py: Syntax hatası otomatik düzeltildi ✅
+   - main.py: Syntax hatası düzeltilemedi ❌
+   - Başarı oranı: %50
+
+2. BU TESTTE (Markdown):
+   - calculator.py: Syntax hatası düzeltilemedi ❌
+   - main.py: Syntax hatası düzeltilemedi ❌
+   - Başarı oranı: %0
+
+3. NEDEN:
+   - LLM farklı kod üretiyor (rastgelelik)
+   - Bu sefer calculator.py'de de hata var
+   - Markdown uyarısı etkisiz
+
+SYNTAX HATALARI DETAYI:
+
+calculator.py:
+  - Satır 69: if b == :
+  - Beklenen: if b == 0:
+  - Hata tipi: Karşılaştırma operatörü sağ tarafı eksik
+
+main.py:
+  - Satır 6: sys.path.insert(, ...)
+  - Beklenen: sys.path.insert(0, ...)
+  - Hata tipi: Fonksiyon parametresi eksik
+
+ORTAK SORUN:
+  - Her iki hatada da değer/parametre eksik
+  - LLM eksik değerleri tamamlayamıyor
+  - Düzeltme prompt'u bu tür hataları çözemiyor
+
+───────────────────────────────────────────────────────────────────────────────
+  ÖNERİLER
+───────────────────────────────────────────────────────────────────────────────
+
+ÖNERİ 1: REGEX-BASED POST-PROCESSING (ÖNEMLİ) ⭐⭐⭐
+  Dosya: coder_agent.py
+  Metod: _check_syntax()
+  
+  LLM'e güvenmek yerine regex ile otomatik düzelt:
+  
+  ```python
+  import re
+  
+  # if/while/for ifadelerinde eksik değerleri düzelt
+  code = re.sub(r'if\s+(\w+)\s*==\s*:', r'if \1 == 0:', code)
+  code = re.sub(r'if\s+(\w+)\s*!=\s*:', r'if \1 != 0:', code)
+  
+  # sys.path.insert eksik parametreyi düzelt
+  code = re.sub(r'sys\.path\.insert\(\s*,', r'sys.path.insert(0,', code)
+  
+  # Genel: == : veya != : gibi hataları düzelt
+  code = re.sub(r'(==|!=|<|>|<=|>=)\s*:', r'\1 0:', code)
+  ```
+  
+  Neden: LLM güvenilir değil, regex kesin çözüm
+
+ÖNERİ 2: SYNTAX CHECKER'I GÜÇLENDİR (ÖNEMLİ) ⭐⭐⭐
+  Dosya: coder_agent.py
+  
+  Syntax hatası varsa:
+  1. Önce regex ile otomatik düzelt
+  2. Hala hata varsa LLM'e gönder
+  3. LLM başarısız olursa dosyayı kaydetme
+  
+  Neden: Syntax hatalı dosya kaydedilmemeli
+
+ÖNERİ 3: CODER MODEL DEĞİŞTİR (OPSIYONEL) ⭐
+  Dosya: config veya orchestrator
+  
+  qwen-2.5-coder-32b-instruct yerine:
+  - claude-3-5-sonnet (daha iyi syntax anlama)
+  - gpt-4 (daha güvenilir)
+  
+  Neden: Mevcut model syntax düzeltmede başarısız
+
+ÖNERİ 4: MARKDOWN PROMPT'U KORU (ÖNEMLİ) ⭐⭐
+  Dosya: coder_agent.py
+  
+  Markdown uyarısını koru ama yeterli değil.
+  Regex post-processing ile birlikte kullan.
+  
+  Neden: Markdown sorunu ayrı bir sorun
+
+───────────────────────────────────────────────────────────────────────────────
+  SONUÇ
+───────────────────────────────────────────────────────────────────────────────
+
+GENEL DEĞERLENDİRME:
+  ❌ Markdown uyarısı eklendi ama etkisiz
+  ❌ Syntax hataları düzeltilemedi
+  ❌ Başarı oranı %50 → %0 (kötüleşti)
+  ❌ Token ve maliyet arttı
+
+SORUN:
+  LLM'e güvenmek yetersiz. Syntax düzeltme için regex gerekli.
+
+EN ÖNEMLİ:
+  Regex-based post-processing ekle (ÖNERİ 1)
+
+GENEL BAŞARI ORANI: %0 (Markdown uyarısı etkisiz)
+
+SONRAKI ADIM:
+  Regex-based syntax düzeltme ekle ve tekrar test et
+
+═══════════════════════════════════════════════════════════════════════════════

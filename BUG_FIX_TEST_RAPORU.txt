@@ -1,0 +1,208 @@
+═══════════════════════════════════════════════════════════════════════════════
+  BUG FIX TEST RAPORU
+  Tarih: 02.03.2026
+  Düzeltilen Bug'lar: 2 kritik bug
+═══════════════════════════════════════════════════════════════════════════════
+
+DÜZELTILEN BUG'LAR:
+
+BUG 1: critic_agent.py
+  Satır 120: approved = parsed.get("approved", True)  ← YANLIŞ DEFAULT
+  
+  Düzeltme:
+  - approved = parsed.get("approved", False)
+  - routing = parsed.get("routing") veya score'a göre hesapla
+  - LLM prompt'una routing field'ı zorunlu hale getirildi
+
+BUG 2: orchestrator.py
+  Satır 893: routing = review_data.get("routing", "EXECUTOR")  ← YANLIŞ DEFAULT
+  
+  Düzeltme:
+  - routing = review_data.get("routing", "CODER_REVISE")
+  - approved = review_data.get("approved", False)
+
+───────────────────────────────────────────────────────────────────────────────
+  TEST SONUÇLARI
+───────────────────────────────────────────────────────────────────────────────
+
+KOMUT: python main.py "Python ile hesap makinesi yaz"
+
+DURUM: ⚠️ TIMEOUT (10 dakika sonra kesildi)
+
+ANCAK ÖNEMLİ BULGULAR:
+
+✅ "[Orchestrator] Iterasyon X/3" LOGU ÇIKIYOR!
+  - Task 1 (Researcher): 3 iterasyon (max'e ulaştı)
+  - Task 2 (Coder): 3 iterasyon (sonunda onaylandı)
+  - Task 3 (Coder): 2+ iterasyon (timeout'ta devam ediyordu)
+
+✅ CRITIC FEEDBACK LOOP ÇALIŞIYOR!
+  - "[Orchestrator] 🔄 Revizyon gerekli (Skor: X/10)"
+  - "[Orchestrator] Iterasyon 1/3"
+  - "[Orchestrator] Iterasyon 2/3"
+  - "[Orchestrator] ✅ Critic onayladı (3 iterasyon)"
+  - "[Orchestrator] ⚠️ Maksimum iterasyon (3) aşıldı, devam ediliyor..."
+
+CRITIC SKORLARI:
+  Task 1 (Researcher):
+  - İterasyon 0: 5.0/10 → CODER_REVISE
+  - İterasyon 1: 5.0/10 → CODER_REVISE
+  - İterasyon 2: 4.2/10 → CODER_REVISE
+  - Maksimum iterasyon aşıldı, devam edildi
+
+  Task 2 (Coder - calculator.py):
+  - İterasyon 0: 6.8/10 → CODER_REVISE
+  - İterasyon 1: 5.0/10 → CODER_REVISE
+  - İterasyon 2: 7.6/10 → EXECUTOR ✅ ONAYLANDI!
+
+  Task 3 (Coder - main.py):
+  - İterasyon 0: 5.2/10 → CODER_REVISE
+  - İterasyon 1: 4.6/10 → CODER_REVISE
+  - İterasyon 2: ? (timeout)
+
+CRITIC ÇAĞRI SAYISI (Timeout'a kadar):
+  - Toplam Critic çağrısı: 20+ (çok fazla!)
+  - Her çağrı: ~5-10 saniye
+  - Toplam Critic süresi: ~100-200 saniye
+
+TOKEN KULLANIMI (Kısmi):
+  - Toplam: ~80,000+ token (timeout'ta)
+  - Critic: ~15,000+ token (sadece Critic!)
+  - Coder: ~50,000+ token
+
+MALİYET (Kısmi):
+  - Toplam: ~$0.015+ (timeout'ta)
+  - Önceki testlere göre 3-4x daha pahalı!
+
+───────────────────────────────────────────────────────────────────────────────
+  ANALİZ: BUG FIX'LER ÇALIŞIYOR AMA YENİ SORUN
+───────────────────────────────────────────────────────────────────────────────
+
+✅ BUG FIX'LER BAŞARILI:
+  - Critic feedback loop artık çalışıyor
+  - İterasyon logları çıkıyor
+  - Skorlar doğru hesaplanıyor
+  - Routing doğru yapılıyor
+
+⚠️ YENİ SORUN: ÇOK FAZLA İTERASYON!
+  - Önceki testlerde: 0 iterasyon
+  - Şimdi: Her task için 2-3 iterasyon
+  - Toplam: 8-10 iterasyon
+  - Bu çok fazla!
+
+NEDEN ÇOK FAZLA İTERASYON:
+  1. Critic çok sıkı puanlıyor (5.0-6.8 arası)
+  2. Eşik 7.0, ama Critic nadiren 7+ veriyor
+  3. Coder her seferinde revize ediyor ama skor yükselmiyor
+  4. Maksimum iterasyon (3) her task için tetikleniyor
+
+TIMEOUT NEDENİ:
+  - Critic feedback loop! (tahmin doğruydu)
+  - Her task için 2-3 iterasyon × 4 task = 8-12 iterasyon
+  - Her iterasyon ~30-60 saniye
+  - Toplam: ~240-720 saniye (4-12 dakika)
+
+───────────────────────────────────────────────────────────────────────────────
+  ÇÖZÜM ÖNERİLERİ
+───────────────────────────────────────────────────────────────────────────────
+
+SEÇENEK 1: CRITIC EŞİĞİNİ DÜŞÜR (ÖNERİLEN)
+  Mevcut: score >= 7 → EXECUTOR
+  Önerilen: score >= 6 → EXECUTOR
+  
+  Neden:
+  - Critic genelde 5-7 arası puan veriyor
+  - 7.0 eşiği çok yüksek
+  - 6.0 daha makul
+  
+  Değişiklik:
+  - critic_agent.py route_by_score(): if score >= 6
+
+SEÇENEK 2: MAX_ITERATIONS'I AZALT
+  Mevcut: max_iterations = 3
+  Önerilen: max_iterations = 2
+  
+  Neden:
+  - 3 iterasyon çok fazla
+  - 2 iterasyon yeterli
+  - Toplam süre %33 azalır
+  
+  Değişiklik:
+  - orchestrator.py _critic_review(): max_iterations = 2
+
+SEÇENEK 3: CRITIC MAX_TOKENS'I AZALT
+  Mevcut: max_tokens = 600
+  Önerilen: max_tokens = 300
+  
+  Neden:
+  - Critic 600 token output üretiyor (çok uzun)
+  - 300 token yeterli
+  - Her çağrı %50 daha hızlı olur
+  
+  Değişiklik:
+  - critic_agent.py act(): max_tokens=300
+
+SEÇENEK 4: RESEARCHER'I CRITIC'TEN MUAF TUT
+  Mevcut: Researcher da Critic'ten geçiyor
+  Önerilen: Sadece Coder Critic'ten geçsin
+  
+  Neden:
+  - Researcher output'u kod değil, araştırma
+  - Critic kod için optimize edilmiş
+  - Researcher için gereksiz
+  
+  Değişiklik:
+  - orchestrator.py _execute_task():
+    if task.assigned_to in ("coder",):  # "researcher" kaldır
+
+SEÇENEK 5: APPROVED LOGIC'İ İYİLEŞTİR
+  Mevcut: approved = parsed.get("approved", False)
+  Önerilen: approved = (score >= 7)
+  
+  Neden:
+  - LLM "approved" field'ını tutarsız döndürüyor
+  - Score'a göre otomatik hesaplamak daha güvenilir
+  
+  Değişiklik:
+  - critic_agent.py act():
+    approved = (score >= 7) if "approved" not in parsed else parsed.get("approved")
+
+───────────────────────────────────────────────────────────────────────────────
+  ÖNERİLEN HIZLI ÇÖZÜM (COMBO)
+───────────────────────────────────────────────────────────────────────────────
+
+1. Critic eşiğini düşür: 7.0 → 6.0
+2. Max iterations'ı azalt: 3 → 2
+3. Critic max_tokens'ı azalt: 600 → 300
+
+BEKLENEN ETKİ:
+  - Toplam iterasyon: 8-10 → 4-6
+  - Toplam süre: 10+ dakika → 3-5 dakika
+  - Maliyet: $0.015+ → $0.006-0.008
+  - Timeout riski: Yüksek → Düşük
+
+───────────────────────────────────────────────────────────────────────────────
+  SONUÇ
+───────────────────────────────────────────────────────────────────────────────
+
+BUG FIX DURUMU:
+  ✅ BUG 1 (critic_agent.py): DÜZELTİLDİ
+  ✅ BUG 2 (orchestrator.py): DÜZELTİLDİ
+  ✅ Critic feedback loop: ÇALIŞIYOR
+  ✅ İterasyon logları: ÇIKIYOR
+
+YENİ SORUN:
+  ⚠️ Çok fazla iterasyon (her task için 2-3)
+  ⚠️ Timeout (10 dakika)
+  ⚠️ Yüksek maliyet ($0.015+)
+
+TIMEOUT NEDENİ:
+  ✅ Critic feedback loop (tahmin doğruydu!)
+  ✅ Bug fix'ler çalışıyor ama Critic çok sıkı puanlıyor
+
+ÖNERİLEN ÇÖZÜM:
+  1. Critic eşiğini 6.0'a düşür
+  2. Max iterations'ı 2'ye düşür
+  3. Critic max_tokens'ı 300'e düşür
+
+═══════════════════════════════════════════════════════════════════════════════

@@ -1,0 +1,375 @@
+═══════════════════════════════════════════════════════════════════════════════
+  QWEN2.5-CODER 32B - FLASK JWT TEST RAPORU
+  Tarih: 02.03.2026 20:35
+  Model: qwen/qwen-2.5-coder-32b-instruct
+  Proje: Flask JWT Authentication System
+═══════════════════════════════════════════════════════════════════════════════
+
+✅ TEST BAŞARILI!
+
+───────────────────────────────────────────────────────────────────────────────
+  PROJE BİLGİLERİ
+───────────────────────────────────────────────────────────────────────────────
+
+Proje Adı: Flask ile kullanıcı giriş sistemi
+Özellikler:
+  • JWT authentication
+  • SQLite veritabanı
+  • /register ve /login endpoint'leri
+  • User model ve şifre hashleme
+
+Session ID: a538f6d2
+Tarih: 02.03.2026 20:32
+
+───────────────────────────────────────────────────────────────────────────────
+  GÖREV TAMAMLAMA
+───────────────────────────────────────────────────────────────────────────────
+
+Toplam Görev: 7
+Tamamlanan: 5 ✅
+Başarısız: 2 ❌
+
+Görev Detayları:
+
+Phase 1: Veritabani Katmani (3 görev)
+  ✅ [OK]   researcher: SQLite kullanıcı tablosu şeması araştırıldı
+  ✅ [OK]   coder: Veritabanı başlangıç betiği oluşturuldu
+  ❌ [HATA] executor: Veritabanı başlatma betiği çalıştırılamadı (3 deneme)
+
+Phase 2: JWT ve Endpoint Katmani (4 görev)
+  ✅ [OK]   researcher: Flask-JWT-Extended araştırıldı
+  ✅ [OK]   coder: auth.py modülü oluşturuldu (register/login)
+  ✅ [OK]   coder: auth.py flask_api şablonuna entegre edildi
+  ❌ [HATA] executor: Flask uygulaması başlatılamadı (3 deneme)
+
+Başarı Oranı: 5/7 = 71.4%
+
+───────────────────────────────────────────────────────────────────────────────
+  OLUŞTURULAN DOSYALAR
+───────────────────────────────────────────────────────────────────────────────
+
+Kaynak Dosyaları (src/):
+  ✅ app.py          - Flask ana uygulama (health endpoint)
+  ✅ auth.py         - JWT authentication modülü
+  ✅ main.py         - Uygulama başlangıç dosyası
+  ✅ models.py       - Veritabanı modelleri
+  ⚠️ output.py       - Output dosyası (ban çalışmadı!)
+
+Test Dosyaları (tests/):
+  ✅ test_app.py     - Uygulama testleri
+
+Diğer:
+  ✅ requirements.txt - 3 paket (Flask, PyJWT, pytest)
+  ✅ .gitignore
+  ✅ plan.json
+
+Toplam: 6 dosya (5 kaynak + 1 test)
+
+───────────────────────────────────────────────────────────────────────────────
+  KOD KALİTESİ ANALİZİ
+───────────────────────────────────────────────────────────────────────────────
+
+auth.py İncelemesi:
+
+✅ Güçlü Yönler:
+  1. JWT token generation ve validation
+  2. User model ile SQLAlchemy entegrasyonu
+  3. Password hashing (werkzeug.security)
+  4. @jwt_required decorator
+  5. /login endpoint
+  6. /profile endpoint (korumalı)
+  7. Türkçe docstring'ler
+  8. Error handling
+
+⚠️ Eksiklikler:
+  1. /register endpoint YOK! (istenmişti)
+  2. SECRET_KEY hardcoded (config'den alınmalı)
+  3. Database initialization eksik
+  4. Flask-JWT-Extended yerine PyJWT kullanılmış
+  5. CORS yapılandırması eksik
+
+app.py İncelemesi:
+
+✅ Temel Flask uygulaması
+✅ CORS desteği
+✅ /health endpoint
+❌ auth.py entegrasyonu eksik
+❌ Database initialization yok
+
+main.py İncelemesi:
+
+⚠️ Dosya bozuk! [FILE:] formatı içinde kalmış
+⚠️ Incomplete kod (kesik)
+❌ Çalıştırılamaz durumda
+
+───────────────────────────────────────────────────────────────────────────────
+  PERFORMANS METRİKLERİ
+───────────────────────────────────────────────────────────────────────────────
+
+Token Kullanımı:
+  📊 Toplam: 58,754 token
+  📥 Input: 47,297 token
+  📤 Output: 11,457 token
+
+Maliyet:
+  💰 $0.008793 USD
+  📊 ~$0.20/M input, $0.20/M output
+  💵 Ortalama: $0.0088/proje
+
+İterasyon:
+  🔄 7 iterasyon
+  ⏱️ Süre: ~2-3 dakika
+
+Kod Kalitesi:
+  📊 Pylint: 5.0/10
+  ⚠️ Flake8: 1 hata
+  📈 Final: 4.5/10
+
+───────────────────────────────────────────────────────────────────────────────
+  SORUNLAR VE HATALAR
+───────────────────────────────────────────────────────────────────────────────
+
+1. output.py BAN ÇALIŞMADI! ⚠️
+   • output.py dosyası oluşturuldu
+   • Ban mekanizması çalışmıyor
+   • agents/coder_agent.py kontrol edilmeli
+
+2. /register ENDPOINT EKSİK ❌
+   • İstekte /register endpoint istenmişti
+   • Sadece /login ve /profile oluşturuldu
+   • /register endpoint yok
+
+3. main.py BOZUK ❌
+   • [FILE:] formatı içinde kalmış
+   • Kod incomplete (kesik)
+   • Çalıştırılamaz durumda
+
+4. EXECUTOR GÖREVLER BAŞARISIZ ❌
+   • Veritabanı başlatma: 3 deneme başarısız
+   • Flask başlatma: 3 deneme başarısız
+   • Executor agent sorunu olabilir
+
+5. [FILE:] FORMAT SORUNU ⚠️
+   • Coder agent [FILE:] formatı kullanmıyor
+   • "UYARI: [FILE:] formatı bulunamadı" mesajı
+   • Ham kod main.py olarak kaydediliyor
+
+6. FLASK-JWT-EXTENDED KULLANILMADI ⚠️
+   • Researcher Flask-JWT-Extended araştırdı
+   • Ama coder PyJWT kullandı
+   • requirements.txt'de Flask-JWT-Extended yok
+
+───────────────────────────────────────────────────────────────────────────────
+  QWEN2.5-CODER 32B DAVRANIŞI
+───────────────────────────────────────────────────────────────────────────────
+
+Gözlemler:
+
+1. Kod Üretimi:
+   ✅ Kod üretiyor (11,457 output token)
+   ✅ Fonksiyonlar ve sınıflar oluşturuyor
+   ⚠️ [FILE:] formatını kullanmıyor
+   ⚠️ Bazen incomplete kod üretiyor
+
+2. Token Kullanımı:
+   ✅ Normal seviyede (11,457 output)
+   ✅ DeepSeek'ten çok daha iyi (4-11 token değil)
+   ✅ Grok-4-Fast ile benzer
+
+3. Maliyet:
+   ✅ Çok makul: $0.0088
+   ✅ Grok-4-Fast'tan ucuz ($0.02-0.08)
+   ✅ DeepSeek'ten biraz pahalı ($0.006)
+
+4. Hız:
+   ✅ Normal hız (2-3 dakika)
+   ✅ Rate limit yok
+   ✅ Timeout olmadı
+
+5. Kod Kalitesi:
+   ⚠️ Orta seviye (4.5/10)
+   ⚠️ Bazı eksiklikler var
+   ⚠️ Format sorunları
+
+───────────────────────────────────────────────────────────────────────────────
+  KARŞILAŞTIRMA: ÖNCEKI TESTLER
+───────────────────────────────────────────────────────────────────────────────
+
+Test 1: Python Hesap Makinesi (Qwen2.5-Coder 32B)
+  ✅ Görev: 4/4 (100%)
+  💰 Maliyet: $0.005309
+  📊 Token: 34,279
+  ⏱️ Süre: Normal (timeout ama bitti)
+  🎯 Sonuç: BAŞARILI
+
+Test 2: Flask JWT Auth (Qwen2.5-Coder 32B)
+  ⚠️ Görev: 5/7 (71.4%)
+  💰 Maliyet: $0.008793
+  📊 Token: 58,754
+  ⏱️ Süre: Normal (2-3 dakika)
+  🎯 Sonuç: KISMEN BAŞARILI
+
+Fark:
+  • Flask projesi daha karmaşık
+  • Daha fazla token kullanıldı (58k vs 34k)
+  • Daha pahalı ($0.0088 vs $0.0053)
+  • Başarı oranı düşük (71% vs 100%)
+  • Executor görevleri başarısız
+
+───────────────────────────────────────────────────────────────────────────────
+  MODEL KARŞILAŞTIRMASI
+───────────────────────────────────────────────────────────────────────────────
+
+┌─────────────────────┬──────────┬───────┬──────────┬──────────┬────────────┐
+│ Model               │ Görev    │ Dosya │ Maliyet  │ Token    │ Sonuç      │
+├─────────────────────┼──────────┼───────┼──────────┼──────────┼────────────┤
+│ Qwen2.5-Coder (T1)  │ 4/4 ✅   │ 4/4   │ $0.005   │ 34k      │ BAŞARILI   │
+│ Qwen2.5-Coder (T2)  │ 5/7 ⚠️   │ 6/6   │ $0.009   │ 59k      │ KISMEN     │
+│ Grok-4-Fast (ref)   │ 5-6/6 ✅ │ 5-6/6 │ $0.02-08 │ ?        │ BAŞARILI   │
+│ DeepSeek-Chat       │ 2/4 ❌   │ 1/2   │ $0.006   │ 43k      │ BAŞARISIZ  │
+│ Qwen3-Coder Free    │ 1/4 ❌   │ 0/4   │ $0.0004  │ 4k       │ RATE LIMIT │
+└─────────────────────┴──────────┴───────┴──────────┴──────────┴────────────┘
+
+Ortalama Başarı:
+  ✅ Qwen2.5-Coder 32B: 87.5% ((4+5)/(4+7))
+  ✅ Grok-4-Fast: 83-100%
+  ❌ DeepSeek-Chat: 50%
+  ❌ Qwen3-Coder Free: 25%
+
+Ortalama Maliyet:
+  💰 Qwen2.5-Coder 32B: $0.007 (($0.005+$0.009)/2)
+  💰 Grok-4-Fast: $0.05 (ortalama)
+  💰 DeepSeek-Chat: $0.006
+  💰 Qwen3-Coder Free: $0.0004 (ama çalışmıyor)
+
+───────────────────────────────────────────────────────────────────────────────
+  SORUN ANALİZİ
+───────────────────────────────────────────────────────────────────────────────
+
+Neden Bazı Görevler Başarısız?
+
+1. Executor Agent Sorunu:
+   • Veritabanı ve Flask başlatma başarısız
+   • 3 deneme yapıldı, hepsi başarısız
+   • Executor agent'ın kodu çalıştırma sorunu
+   • Veya dosyalar eksik/bozuk
+
+2. [FILE:] Format Sorunu:
+   • Coder agent [FILE:] formatını kullanmıyor
+   • Ham kod main.py olarak kaydediliyor
+   • Bu yüzden dosyalar bozuk olabilir
+
+3. output.py Ban Çalışmıyor:
+   • output.py oluşturuldu
+   • Ban mekanizması çalışmıyor
+   • agents/coder_agent.py kontrol edilmeli
+
+4. /register Endpoint Eksik:
+   • İstekte açıkça /register istenmişti
+   • Ama sadece /login oluşturuldu
+   • Planner veya coder hatası
+
+───────────────────────────────────────────────────────────────────────────────
+  ÖNERİLER
+───────────────────────────────────────────────────────────────────────────────
+
+1. [FILE:] Format Sorununu Düzelt: 🔴 KRİTİK
+   • agents/coder_agent.py kontrol et
+   • Neden [FILE:] formatı kullanılmıyor?
+   • Prompt'u güçlendir
+
+2. output.py Ban'ı Düzelt: 🔴 KRİTİK
+   • agents/coder_agent.py kontrol et
+   • output.py ban mekanizması çalışmıyor
+   • Dosya adı kontrolü ekle
+
+3. Executor Agent'ı İyileştir: 🟡 ORTA
+   • Neden görevler başarısız?
+   • Dosya yolları doğru mu?
+   • Hata mesajları daha detaylı olmalı
+
+4. /register Endpoint Ekle: 🟢 DÜŞÜK
+   • Manuel olarak eklenebilir
+   • Veya yeni test çalıştır
+
+5. Daha Fazla Test: 🟢 DÜŞÜK
+   • 3-5 farklı proje test et
+   • Karmaşık projeler dene
+   • Başarı oranını ölç
+
+───────────────────────────────────────────────────────────────────────────────
+  SONUÇ
+───────────────────────────────────────────────────────────────────────────────
+
+⚠️ QWEN2.5-CODER 32B KISMEN BAŞARILI
+
+Güçlü Yönler:
+  ✅ Kod üretiyor (11k+ output token)
+  ✅ Makul maliyet ($0.007 ortalama)
+  ✅ Rate limit yok
+  ✅ Normal hız
+  ✅ Fonksiyonlar ve sınıflar oluşturuyor
+
+Zayıf Yönler:
+  ❌ [FILE:] formatını kullanmıyor
+  ❌ output.py ban çalışmıyor
+  ❌ Bazı görevler başarısız (executor)
+  ❌ Kod kalitesi orta (4.5/10)
+  ❌ Bazı eksiklikler var (/register)
+
+Karşılaştırma:
+  🥇 Basit projeler: Qwen2.5-Coder 32B (4/4, $0.005)
+  🥈 Karmaşık projeler: Grok-4-Fast (daha güvenilir)
+  🥉 Maliyet: Qwen2.5-Coder 32B ($0.007 vs $0.05)
+
+Final Karar:
+  ⚠️ Qwen2.5-Coder 32B kullanılabilir AMA:
+    1. [FILE:] format sorunu düzeltilmeli
+    2. output.py ban düzeltilmeli
+    3. Executor agent iyileştirilmeli
+    4. Daha fazla test gerekli
+
+  ✅ Grok-4-Fast daha güvenilir (şimdilik)
+  ✅ Qwen2.5-Coder 32B potansiyel var (düzeltmelerle)
+
+───────────────────────────────────────────────────────────────────────────────
+  SONRAKI ADIMLAR
+───────────────────────────────────────────────────────────────────────────────
+
+1. [FILE:] Format Sorununu Düzelt:
+   • agents/coder_agent.py incele
+   • Prompt'u güçlendir
+   • Test et
+
+2. output.py Ban'ı Düzelt:
+   • agents/coder_agent.py incele
+   • Dosya adı kontrolü ekle
+   • Test et
+
+3. Daha Fazla Test:
+   • 3-5 farklı proje
+   • Basit ve karmaşık
+   • Başarı oranını ölç
+
+4. Grok-4-Fast ile Karşılaştır:
+   • Aynı projeyi Grok-4-Fast ile test et
+   • Sonuçları karşılaştır
+   • Hangisi daha iyi?
+
+═══════════════════════════════════════════════════════════════════════════════
+  RAPOR SONU
+═══════════════════════════════════════════════════════════════════════════════
+
+Test: Flask JWT Authentication System
+Model: qwen/qwen-2.5-coder-32b-instruct
+Sonuç: ⚠️ KISMEN BAŞARILI (5/7 görev, 71.4%)
+Maliyet: $0.008793 USD
+Token: 58,754 (47k in / 11k out)
+
+Önerilen Aksiyon:
+  1. [FILE:] format sorununu düzelt
+  2. output.py ban'ı düzelt
+  3. Daha fazla test yap
+  4. Grok-4-Fast ile karşılaştır
+
+═══════════════════════════════════════════════════════════════════════════════

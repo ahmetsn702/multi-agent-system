@@ -1,0 +1,56 @@
+--- SORU ---
+core/orchestrator.py içinde bir task completed olduğunda bir sonraki task'ın context'ine önceki task'ın result/output'u nasıl aktarılıyor? Kodu göster.
+
+--- CEVAP ---
+Evet, `core/orchestrator.py` dosyasında bu işlem iki adımda gerçekleşiyor: İlk olarak tamamlanan görevin (task) sonucu merkezi bir `results` listesine kaydediliyor. İkinci adımda ise sıraya giren ve çalışmaya hazır olan sıradaki görevin (task) `context` sözlüğüne bu sonuçlar `_enrich_task_context` fonksiyonu aracılığıyla enjekte ediliyor.
+
+İşte tam olarak süreci yürüten kod parçaları:
+
+### 1. Adım: Tamamlanan Görevin Sonuç Listesine Eklenmesi
+`_react_loop` fonksiyonu içindeki asenkron döngüde, bir ajan işini bitirip başarılı olduğunda sonucunu (`result.content`) global `results` listesine yazar:
+
+```python
+# core/orchestrator.py - _react_loop() içerisinden
+                record.result = result
+                if result and result.success:
+                    record.status = TaskStatus.COMPLETED
+                    completed_ids.add(task.task_id)
+                    results.append({
+                        "task_id": task.task_id,
+                        "agent": task.assigned_to,
+                        "description": task.description,
+                        "result": result.content,  # <--- BİR ÖNCEKİ GÖREVİN ÇIKTISI (KOD, RAPOR VS.)
+                        "success": True,
+                    })
+                    await self._emit_status(f"✅ Task {task.task_id} completed by {task.assigned_to}")
+```
+
+### 2. Adım: Sıradaki Görevin Bağlamına (Context) Aktarılması
+Hemen ardından, yürütülmeye yeni başlayacak olan her göreve (`ready_tasks` içindeki `task`), bu toplanan `results` listesi `_enrich_task_context` fonksiyonuyla aktarılır. 
+
+Şu anki güncel kod yapınızda veriler şu şekilde ayrıştırılıp bir sonraki ajana veriliyor:
+
+```python
+# core/orchestrator.py
+    async def _enrich_task_context(self, task: Task, results: list[dict]):
+        """Add relevant completed results to task context."""
+        
+        # Eğer sıradaki ajan Coder (Yazılımcı) ise, geçmiş araçtırma (Researcher) 
+        # sonuçlarını doğrudan task.context["research"] içine göm!
+        if task.assigned_to == "coder":
+            research_results = [
+                r for r in results if r.get("agent") == "researcher" and r.get("success")
+            ]
+            if research_results:
+                task.context["research"] = str(research_results[-1].get("result", ""))
+
+        # Ajana, ondan önce bitmiş olan tüm görevlerin ne olduğunu kısa bir 
+        # künye özeti olarak task.context["completed_tasks"] içine ekle:
+        task.context["completed_tasks"] = [
+            {"task_id": r["task_id"], "description": r["description"]}
+            for r in results
+        ]
+```
+
+**Nasıl Çalışır?**
+Diyelim ki `Araştırmacı` çalışmayı bitirdi. Ürettiği uzun metin `results` listesine bir sözlük objesi olarak (anahtarı `"result"`) eklenir. Hemen ardından sistem `Yazılımcı` ajana geçtiğinde, çalıştırmadan bir milisaniye önce `_enrich_task_context` fonksiyonunu çalıştırır. Fonksiyon bakar, eğer ajan `coder` ise listeyi tarar ve araştırmacının metnini `task.context["research"]` içerisine kopyalar. Böylece `Yazılımcı` ajan, kendisine verilen `task.context`'i okuduğu an araştırmacının topladığı tüm verilere ulaşmış olur.

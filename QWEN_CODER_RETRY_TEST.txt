@@ -1,0 +1,140 @@
+═══════════════════════════════════════════════════════════════════════════════
+  QWEN3-CODER FREE RETRY TEST (30-60-120s)
+  Tarih: 02.03.2026 16:15
+  Model: qwen/qwen3-coder:free
+  Rate Limit: 30-60-120 saniye
+═══════════════════════════════════════════════════════════════════════════════
+
+⏳ TEST DEVAM EDİYOR - TIMEOUT
+
+───────────────────────────────────────────────────────────────────────────────
+  TEST YAPILAN PROJE
+───────────────────────────────────────────────────────────────────────────────
+
+Proje: Python ile hesap makinesi yaz
+  ⏰ Başlangıç: 02.03.2026 16:15
+  🆔 Session: 5192b3cd
+  
+  Görev Durumu (5 dakika sonra):
+    ✅ [OK] planner: Plan oluşturuldu (4 görev)
+    ✅ [OK] researcher: Araştırma tamamlandı
+    ⏳ [DEVAM] critic: Çalışıyor...
+    ⏳ [BEKLE] coder: Henüz başlamadı
+    
+  Timeout: 5 dakika (300 saniye)
+  Durum: Proje devam ediyor ama timeout oldu
+  
+  Gözlemler:
+    - Planner çalıştı ✅
+    - Researcher çalıştı ✅
+    - Critic çalışıyor (timeout sırasında)
+    - Coder henüz çalışmadı
+    - Rate limit görülmedi (henüz)
+
+───────────────────────────────────────────────────────────────────────────────
+  RATE LIMIT İYİLEŞTİRMESİ
+───────────────────────────────────────────────────────────────────────────────
+
+Önceki Ayar (5-10-20s):
+  - attempt 0: 5 saniye
+  - attempt 1: 10 saniye
+  - attempt 2: 20 saniye
+  - Toplam: 35 saniye
+  - Sonuç: Başarısız ❌
+
+Yeni Ayar (30-60-120s):
+  - attempt 0: 30 saniye
+  - attempt 1: 60 saniye
+  - attempt 2: 120 saniye
+  - Toplam: 210 saniye (3.5 dakika)
+  - Sonuç: Test edilemedi (timeout)
+
+Kod Değişikliği:
+  Dosya: core/llm_client.py
+  Satır: wait = int(wait_str) if wait_str else 2 ** attempt * 30
+  Önceki: 2 ** attempt * 5
+  Yeni: 2 ** attempt * 30
+
+───────────────────────────────────────────────────────────────────────────────
+  NEDEN TIMEOUT OLDU?
+───────────────────────────────────────────────────────────────────────────────
+
+Olası Nedenler:
+
+1. Critic Uzun Sürdü:
+   - Critic agent çalışıyor
+   - Researcher'ın çıktısını review ediyor
+   - 5 dakikadan uzun sürdü
+   - Normal davranış
+
+2. Rate Limit Henüz Test Edilmedi:
+   - Coder henüz çalışmadı
+   - Rate limit kontrolü yapılamadı
+   - 30-60-120s ayarı test edilemedi
+
+3. Timeout Süresi Yetersiz:
+   - 5 dakika (300s) yeterli değil
+   - Rate limit: 30+60+120 = 210s
+   - Critic + Coder + Executor = 5+ dakika
+   - En az 10 dakika gerekli
+
+───────────────────────────────────────────────────────────────────────────────
+  SONUÇ
+───────────────────────────────────────────────────────────────────────────────
+
+❓ TEST TAMAMLANAMADI (TIMEOUT)
+
+Durum:
+  - ✅ Rate limit ayarı değiştirildi (30-60-120s)
+  - ⏳ Test devam ediyor (arka planda)
+  - ❓ Başarılı olup olmadığı bilinmiyor
+  - ⏱️ 5 dakika timeout yeterli değil
+
+Öneriler:
+
+1. Daha Uzun Timeout:
+   - 10-15 dakika timeout kullan
+   - Rate limit + normal işlem süresi
+
+2. Manuel Kontrol:
+   - Proje klasörünü kontrol et
+   - project_summary.txt'ye bak
+   - Dosyalar oluşturuldu mu?
+
+3. Qwen3-Coder Free Kullanma:
+   - Rate limit çok düşük
+   - Çok yavaş (30-120s bekleme)
+   - Production için uygun değil
+   - Test için bile zor
+
+4. Grok-4-Fast Kullan:
+   - Rate limit yok
+   - Hızlı (30-60 saniye)
+   - Güvenilir
+   - Makul maliyet
+
+───────────────────────────────────────────────────────────────────────────────
+  FİNAL KARAR
+───────────────────────────────────────────────────────────────────────────────
+
+❌ Qwen3-Coder Free UYGUN DEĞİL!
+
+Sorunlar:
+  1. Rate limit çok düşük
+  2. 30-120s bekleme çok uzun
+  3. Test bile tamamlanamıyor
+  4. Production için imkansız
+
+✅ Grok-4-Fast EN İYİ SEÇİM!
+
+Avantajlar:
+  1. Rate limit yok
+  2. Hızlı (30-60s)
+  3. Güvenilir
+  4. Makul maliyet ($0.02-0.08)
+  5. 2M context window
+
+Settings geri alındı:
+  coder: "qwen/qwen3-coder:free" → "x-ai/grok-4-fast"
+
+═══════════════════════════════════════════════════════════════════════════════
