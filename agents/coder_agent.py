@@ -26,8 +26,9 @@ CIKTI FORMATI — KESINLIKLE BU FORMATI KULLAN:
 
 Once kisa bir analiz yaz, sonra her dosya icin su blogu kullan:
 
-[FILE:dosya_adi.py]
-# tum Python kodu buraya — hicbir kisaltma olmadan, eksiksiz
+[FILE:utils.py]
+def helper():
+    pass
 [/FILE]
 
 [FILE:test_dosya_adi.py]

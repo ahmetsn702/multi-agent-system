@@ -110,9 +110,6 @@ class LLMClient:
             # Fallback: OpenRouter key'i dene
             api_key = os.getenv("OPENROUTER_API_KEY", "")
 
-        # No-key environments (e.g. local unit tests) should still initialize cleanly.
-        self._mock_mode = not bool(api_key)
-
         self.pricing = PRICING.get(self.model_id, {"input": 0.15, "output": 0.60})
         budget = TOKEN_BUDGET.get(self.model_id, {"max_input": 128000, "max_output": 4000})
         self.token_budget = budget
@@ -166,10 +163,6 @@ class LLMClient:
         max_tokens: int = 4096,
         stream: bool = False,
     ) -> str:
-        if self._mock_mode:
-            # Return a deterministic response for offline/test mode.
-            return "Mock response (no API key configured)."
-
         await _rate_limiter.acquire()
 
         # V2: respect per-agent output limit

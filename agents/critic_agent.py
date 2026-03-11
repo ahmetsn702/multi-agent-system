@@ -54,13 +54,13 @@ class CriticAgent(BaseAgent):
         )
 
     def route_by_score(self, score: int, revision_count: int) -> str:
-        if score >= 7:
+        if score >= 5:
             return "EXECUTOR"            # Direkt çalıştır
-        elif score >= 4 and revision_count < 2:
+        elif score >= 3 and revision_count < 2:
             return "CODER_REVISE"        # Coder'a geri, max 2 kez
-        elif score >= 4 and revision_count >= 2:
+        elif score >= 3 and revision_count >= 2:
             return "EXECUTOR_ANYWAY"     # 2 revizyon yeterliydi, devam
-        else:  # score < 4
+        else:  # score < 3
             return "PLANNER_REPLAN"      # Baştan planla, görev yanlış anlaşıldı
 
     async def think(self, task: Task) -> ThoughtProcess:

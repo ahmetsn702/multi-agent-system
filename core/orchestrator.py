@@ -260,24 +260,6 @@ class Orchestrator:
                 task.context["project_slug"] = slug
                 task.context["pip_packages"] = pip_packages
 
-            # Check for circular dependencies within the same phase
-            phase_task_ids = {t.task_id for t in tasks}
-            for task in tasks:
-                if task.dependencies:
-                    # Check if any dependency is in the same phase and still pending
-                    circular_deps = []
-                    for dep_id in task.dependencies:
-                        if dep_id in phase_task_ids:
-                            # Dependency is in the same phase
-                            dep_record = self._task_records.get(dep_id)
-                            if dep_record and dep_record.status == TaskStatus.PENDING:
-                                circular_deps.append(dep_id)
-                    
-                    # If circular dependency detected, clear dependencies
-                    if circular_deps:
-                        self._log(f"⚠️ Circular dependency detected for task {task.task_id}: {circular_deps}. Clearing dependencies.")
-                        task.dependencies = []
-
             # Execute phase
             phase_results = await self._react_loop(tasks, user_goal)
             all_results.extend(phase_results)
