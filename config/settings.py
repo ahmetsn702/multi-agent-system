@@ -23,7 +23,7 @@ MODEL_ROUTING = {
     "planner":    {"model": "openai/gpt-4o-mini",       "provider": "openrouter"},
     "researcher": {"model": "llama-3.3-70b-versatile",  "provider": "groq"},
     "coder":      {"model": "openai/gpt-4o-mini",       "provider": "openrouter"},
-    "critic":     {"model": "anthropic/claude-sonnet-4-6", "provider": "openrouter"},
+    "critic":     {"model": "llama-3.3-70b-versatile",  "provider": "groq"},
     "executor":   None,
 }
 
@@ -48,26 +48,10 @@ TOKEN_BUDGET = {
             "critic":     600,
         }
     },
-    "qwen/qwen3-30b-a3b": {
-        "max_input": 32000,
-        "max_output": 4000,
-        "per_agent": {
-            "planner": 1500,
-        }
-    },
-    "anthropic/claude-sonnet-4-6": {
-        "max_input": 200000,
-        "max_output": 8000,
-        "per_agent": {
-            "critic": 600,
-        }
-    },
 }
 
 # Pricing (USD per 1M tokens)
 PRICING = {
     "openai/gpt-4o-mini":       {"input": 0.15, "output": 0.60},
     "llama-3.3-70b-versatile":  {"input": 0.0,  "output": 0.0},   # Groq free
-    "qwen/qwen3-30b-a3b":       {"input": 0.0,  "output": 0.0},   # Free via OpenRouter
-    "anthropic/claude-sonnet-4-6": {"input": 3.0, "output": 15.0},
 }
