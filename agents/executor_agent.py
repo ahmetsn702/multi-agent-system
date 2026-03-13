@@ -16,37 +16,15 @@ from tools.file_manager import (
 )
 from tools.shell_executor import run_shell
 
-SYSTEM_PROMPT = """CRITICAL RULE: Run pytest, then immediately call done.
-Never use read_file, write_file, or list_dir tools.
-Sen dikkatli bir sistem operatörü yapay zekasın. Kabuk komutlarını yürütür ve dosyaları güvenli bir şekilde yönetirsin.
+SYSTEM_PROMPT = """Return ONLY a JSON tool call. No explanation, no markdown, no text.
 
-Her zaman:
-- Yıkıcı işlemlerden önce onayla
-- Sonuçları çıkış kodlarıyla doğru bir şekilde raporla
-- En az yıkıcı yaklaşımı tercih et
-- Gerçekleştirilen tüm işlemleri kaydet
+Format:
+{{"tool": "bash", "command": "YOUR_COMMAND"}}
+or
+{{"tool": "done", "result": "SUMMARY"}}
 
-İşlemleri planlarken JSON formatında yanıt ver:
-{
-  "operations": [
-    {
-      "type": "shell|python|file_read|file_write|file_list|create_dir|delete_file",
-      "description": "bu işlemin ne yaptığı",
-      "command_or_content": "gerçek komut veya içerik",
-      "target_path": "uygulanabilirse dosya yolu",
-      "is_destructive": false
-    }
-  ],
-  "safety_notes": "herhangi bir güvenlik değerlendirmesi"
-}
-
-Sen bir kod yürütücüsüsün. Görevin sadece şunlar:
-1. Verilen Python kodunu workspace/projects/ içine kaydet
-2. Kodu çalıştır ve sonucu raporla
-3. ASLA kendin kod yazma — sadece ver
-4. Dosya kaydedemezsen hata mesajını açıkça belirt
-Yanıtın şu formatta olmalı:
-{"action": "save_and_run", "filename": "dosya.py", "code": "...kod..."}"""
+Project structure:
+{project_structure}"""
 
 
 class ExecutorAgent(BaseAgent):
@@ -381,7 +359,7 @@ class ExecutorAgent(BaseAgent):
                 continue
 
             result = None
-            if op_type == "shell":
+            if op_type in ("shell", "bash"):
                 command = operation.get("command_or_content", "")
                 result_data = await self._run_subprocess(command, project_slug)
                 results.append({
@@ -450,3 +428,163 @@ class ExecutorAgent(BaseAgent):
         """List all files in the workspace."""
         result = await self.use_tool("list_dir", path="")
         return result.data.get("entries", []) if result.success else []
+
+    def _parse_tool_call(self, response_text: str) -> Optional[dict]:
+        """
+        LLM çıktısından tool_call JSON bloğunu çıkar ve normalize et.
+        
+        Desteklenen formatlar:
+        - ```tool_call ... ```
+        - ```json ... ```
+        - Düz { ... } JSON
+        
+        Alias mapping ve argument normalization yapılır.
+        """
+        import json
+        
+        def normalize_tool_call(parsed: dict) -> Optional[dict]:
+            """Tool call'u normalize et: alias'ları çöz ve argümanları düzenle."""
+            if not isinstance(parsed, dict):
+                return None
+            
+            # 1. Tool key'ini bul (tool, action, command, type, tool_name)
+            tool_key = None
+            for key in ['tool', 'action', 'command', 'type', 'tool_name']:
+                if key in parsed:
+                    tool_key = key
+                    break
+            
+            if not tool_key:
+                return None
+            
+            tool_name = str(parsed[tool_key]).strip()
+            
+            # 2. Tool alias mapping
+            tool_aliases = {
+                'bash': 'bash',
+                'run': 'bash',
+                'shell': 'bash',
+                'cmd': 'bash',
+                'execute': 'bash',
+                'read': 'read_file',
+                'read_file': 'read_file',
+                'cat': 'read_file',
+                'write': 'write_file',
+                'write_file': 'write_file',
+                'save': 'write_file',
+                'finish': 'done',
+                'complete': 'done',
+                'exit': 'done',
+                'end': 'done',
+                'done': 'done',
+            }
+            
+            normalized_tool = tool_aliases.get(tool_name.lower(), tool_name)
+            
+            # 3. Normalized tool_call oluştur
+            normalized = {'tool': normalized_tool}
+            
+            # 4. Argümanları normalize et
+            if normalized_tool == 'bash':
+                # bash için: command, cmd, script, code → command
+                cmd_value = None
+                for key in ['command', 'cmd', 'script', 'code', 'tool_input']:
+                    if key in parsed:
+                        val = parsed[key]
+                        if isinstance(val, dict):
+                            cmd_value = val.get('command') or val.get('cmd')
+                        else:
+                            cmd_value = val
+                        break
+                
+                if cmd_value:
+                    normalized['command'] = str(cmd_value).strip()
+                    
+            elif normalized_tool == 'read_file':
+                # read_file için: path, file, filename, filepath → path
+                path_value = None
+                for key in ['path', 'file', 'filename', 'filepath']:
+                    if key in parsed:
+                        path_value = parsed[key]
+                        break
+                
+                if path_value:
+                    normalized['path'] = str(path_value).strip()
+                    
+            elif normalized_tool == 'write_file':
+                # write_file için: path + content
+                path_value = None
+                for key in ['path', 'file', 'filename', 'filepath']:
+                    if key in parsed:
+                        path_value = parsed[key]
+                        break
+                
+                content_value = None
+                for key in ['content', 'data', 'text', 'code']:
+                    if key in parsed:
+                        content_value = parsed[key]
+                        break
+                
+                if path_value:
+                    normalized['path'] = str(path_value).strip()
+                if content_value:
+                    normalized['content'] = str(content_value)
+                    
+            elif normalized_tool == 'done':
+                # done için: result, message, summary → result
+                result_value = None
+                for key in ['result', 'message', 'summary', 'output']:
+                    if key in parsed:
+                        result_value = parsed[key]
+                        break
+                
+                if result_value:
+                    normalized['result'] = str(result_value).strip()
+            
+            # 5. Diğer tüm key'leri kopyala (tool_key hariç)
+            for key, value in parsed.items():
+                if key != tool_key and key not in normalized:
+                    normalized[key] = value
+            
+            return normalized
+        
+        # Format 1: ```tool_call ... ``` bloğunu ara
+        pattern = r'```tool_call\s*(.*?)\s*```'
+        match = re.search(pattern, response_text, re.DOTALL)
+        if match:
+            try:
+                parsed = json.loads(match.group(1).strip())
+                return normalize_tool_call(parsed)
+            except json.JSONDecodeError:
+                pass
+
+        # Format 2: ```json ... ``` bloğunu dene
+        pattern2 = r'```json\s*(.*?)\s*```'
+        match2 = re.search(pattern2, response_text, re.DOTALL)
+        if match2:
+            try:
+                parsed = json.loads(match2.group(1).strip())
+                return normalize_tool_call(parsed)
+            except json.JSONDecodeError:
+                pass
+
+        # Format 3: Düz { ... } JSON'ı dene
+        try:
+            start = response_text.index('{')
+            depth = 0
+            for i, ch in enumerate(response_text[start:], start):
+                if ch == '{':
+                    depth += 1
+                elif ch == '}':
+                    depth -= 1
+                    if depth == 0:
+                        candidate = response_text[start:i+1]
+                        parsed = json.loads(candidate)
+                        normalized = normalize_tool_call(parsed)
+                        if normalized:
+                            return normalized
+                        break
+        except (ValueError, json.JSONDecodeError):
+            pass
+
+        return None
