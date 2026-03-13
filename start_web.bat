@@ -20,6 +20,6 @@ echo  Tarayicinizda / telefonunuzda yukardaki adresi acin.
 echo  Durdurmak icin: Ctrl+C
 echo.
 
-cd /d "%~dp0.."
+cd /d "%~dp0"  REM updated: removed AWS refs
 uvicorn api.main_api:app --host 0.0.0.0 --port 8000 --reload
 pause

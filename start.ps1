@@ -3,7 +3,7 @@
 # Kullanım: powershell -ExecutionPolicy Bypass -File start.ps1
 
 $HOST_DIR   = Split-Path -Parent $MyInvocation.MyCommand.Path
-$PROJECT    = Join-Path $HOST_DIR "multi_agent_system"
+$PROJECT    = $HOST_DIR  # updated: removed AWS refs
 $PORT       = 8000
 
 # ── Renkli Banner ──────────────────────────────────────────────────────────

@@ -46,7 +46,7 @@ def print_banner():
         Text.assemble(
             ("  ╔═══════════════════════════════════╗\n", "bright_blue"),
             ("  ║   Çoklu Ajan Orkestrasyon Sistemi   ║\n", "bold bright_white"),
-            ("  ║       Powered by AWS Bedrock        ║\n", "bright_cyan"),
+            ("  ║    Powered by OpenRouter + Groq     ║\n", "bright_cyan"),  # updated: removed AWS refs
             ("  ╚═══════════════════════════════════╝\n", "bright_blue"),
             ("  Model: us.anthropic.claude-3-5-haiku-20241022-v1:0\n", "dim"),
             ("  Bağlam: 200,000 jeton (token)\n", "dim"),
