@@ -1,0 +1,339 @@
+╔══════════════════════════════════════════════════════════════╗
+║          ÇOKLU AJAN ORKESTRASYON SİSTEMİ (V3)              ║
+║              Tam Proje Tanıtım Dokümanı                     ║
+║                    Şubat 2026                                ║
+╚══════════════════════════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. PROJE NEDİR?
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Bu proje, birden fazla yapay zeka ajanının birlikte çalışarak
+yazılım projeleri ürettiği bir orkestrasyon sistemidir.
+
+Kullanıcı bir hedef yazar (örn: "Python ile hesap makinesi yaz"),
+sistem bu hedefi 5 farklı ajana böler, her ajan kendi görevini
+yapar ve sonunda çalışır durumda bir proje ortaya çıkar.
+
+Gerçek dünya karşılığı: Bir yazılım şirketinde proje yöneticisi,
+araştırmacı, yazılımcı, kalite kontrol ve devops ekibinin
+otomatize edilmiş hali.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. MİMARİ YAPI
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Kullanıcı Hedefi
+      │
+      ▼
+┌─────────────┐
+│  ORCHESTRATOR │ ← Tüm sistemi yöneten beyin
+└──────┬──────┘
+       │
+       ├──▶ PlannerAgent    → Hedefi alt görevlere böler
+       ├──▶ ResearcherAgent → İnternette araştırma yapar
+       ├──▶ CoderAgent      → Gerçek Python kodu yazar
+       ├──▶ CriticAgent     → Kodu puanlar, kalite kontrol
+       └──▶ ExecutorAgent   → Kodu çalıştırır, test eder
+
+Her ajan bağımsız çalışır ama MessageBus üzerinden haberleşir.
+Orchestrator, görevleri fazlara (phase) böler ve sırayla çalıştırır.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. 5 AJAN VE GÖREVLERİ
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+┌────────────────────────────────────────────────────────────┐
+│ 1. PLANNER (Planlayıcı)                                    │
+│    Dosya: agents/planner_agent.py                          │
+│    Model: openai/gpt-oss-120b (OpenRouter)                 │
+│    Görev: Kullanıcının hedefini analiz eder, alt görevlere │
+│           böler, fazlara ayırır (Phase 1, 2, 3...)         │
+│    Çıktı: JSON formatında görev listesi                    │
+│    Maliyet: ~$0.001/proje                                  │
+├────────────────────────────────────────────────────────────┤
+│ 2. RESEARCHER (Araştırmacı)                                │
+│    Dosya: agents/researcher_agent.py                       │
+│    Model: llama-3.3-70b-versatile (Groq - BEDAVA)          │
+│    Görev: İnternette araştırma yapar, kütüphane bilgisi    │
+│           toplar, best practice'leri bulur                  │
+│    Çıktı: Araştırma raporu (JSON)                          │
+│    Maliyet: $0.00 (Groq bedava!)                           │
+├────────────────────────────────────────────────────────────┤
+│ 3. CODER (Yazılımcı)                                       │
+│    Dosya: agents/coder_agent.py                            │
+│    Model: openai/gpt-oss-120b (OpenRouter)                 │
+│    Görev: Gerçek Python kodu yazar, dosya oluşturur        │
+│    Özellik: Mevcut dosyaları kontrol eder (duplikasyon yok)│
+│    Çıktı: [FILE:dosya.py]...[/FILE] formatında kod         │
+│    Maliyet: ~$0.001/görev                                  │
+├────────────────────────────────────────────────────────────┤
+│ 4. CRITIC (Eleştirmen)                                     │
+│    Dosya: agents/critic_agent.py                           │
+│    Model: llama-3.3-70b-versatile (Groq - BEDAVA)          │
+│    Görev: Kodu 5 kritere göre puanlar (1-10):              │
+│           - Doğruluk (correctness)                         │
+│           - Kalite (quality)                               │
+│           - Test kapsamı (test_coverage)                   │
+│           - Mimari (architecture)                          │
+│           - Güvenlik (security)                            │
+│    Karar: ≥7.0 = ONAYLA, 4-7 = REVİZYON, <4 = YENİDEN    │
+│    Maliyet: $0.00 (Groq bedava!)                           │
+├────────────────────────────────────────────────────────────┤
+│ 5. EXECUTOR (Yürütücü)                                     │
+│    Dosya: agents/executor_agent.py                         │
+│    Model: openai/gpt-4o-mini (OpenRouter)                  │
+│    Görev: Kodu subprocess ile gerçek çalıştırır,           │
+│           pip install yapar, test sonuçlarını raporlar      │
+│    Güvenlik: Tehlikeli komutları engeller (rm, del vs.)     │
+│    Maliyet: ~$0.0001/görev                                 │
+└────────────────────────────────────────────────────────────┘
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4. DUAL PROVIDER MİMARİSİ
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Sistem iki farklı LLM sağlayıcısı kullanır:
+
+┌──────────────────────────────────────────────────────┐
+│ OPENROUTER (openrouter.ai)                           │
+│ ├─ Planner  → openai/gpt-oss-120b ($0.039/$0.19)    │
+│ ├─ Coder    → openai/gpt-oss-120b ($0.039/$0.19)    │
+│ └─ Executor → openai/gpt-4o-mini  ($0.15/$0.60)     │
+│                                                      │
+│ GROQ (groq.com)                                      │
+│ ├─ Researcher → llama-3.3-70b-versatile ($0.00)      │
+│ └─ Critic     → llama-3.3-70b-versatile ($0.00)      │
+└──────────────────────────────────────────────────────┘
+
+NEDEN İKİ PROVIDER?
+- Groq: Sınırsız bedava istek, çok hızlı yanıt
+- OpenRouter: Daha fazla model seçeneği, ücretli modeller
+- Bu sayede toplam maliyet proje başı ~$0.003-$0.01
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5. GÖREV AKIŞI (Bir Projenin Yolculuğu)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Örnek: "Python ile hesap makinesi yaz"
+
+ADIM 1 — Planlama
+  Planner hedefi alır → 3 faza böler:
+  Faz 1: Veritabanı/temel yapı
+  Faz 2: İş mantığı/fonksiyonlar
+  Faz 3: Arayüz/test/export
+
+ADIM 2 — Her görev için döngü:
+  ┌──────────────────────────────────────┐
+  │ Researcher → internette araştır      │
+  │      ↓                               │
+  │ Coder → araştırmaya göre kod yaz     │
+  │      ↓                               │
+  │ Critic → kodu puanla                 │
+  │      ↓                               │
+  │ ≥7.0? → EVET → Executor (çalıştır)  │
+  │         HAYIR → Coder'a geri gönder  │
+  └──────────────────────────────────────┘
+
+ADIM 3 — Tüm fazlar bitince:
+  → project_summary.txt oluşturulur
+  → Maliyet raporu gösterilir
+  → Dosyalar workspace/projects/ altına kaydedilir
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6. DOSYA YAPISI
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+multi_agent_system/
+├── main.py                    ← Ana giriş noktası (CLI)
+├── requirements.txt           ← Python bağımlılıkları
+├── start_web.bat              ← Web arayüzünü başlatır
+├── .env                       ← API anahtarları (GİZLİ)
+├── .env.example               ← API key şablonu
+├── .gitignore                 ← Git'e dahil edilmeyen dosyalar
+│
+├── config/
+│   └── settings.py            ← Model routing, fiyatlar, token limitleri
+│
+├── core/
+│   ├── base_agent.py          ← Tüm ajanların üst sınıfı
+│   ├── llm_client.py          ← LLM API istemcisi (dual provider)
+│   ├── memory.py              ← Ajan bellek sistemi
+│   ├── message_bus.py         ← Ajanlar arası mesajlaşma
+│   └── orchestrator.py        ← Ana orkestratör (iş akışı yönetimi)
+│
+├── agents/
+│   ├── planner_agent.py       ← Planlayıcı ajan
+│   ├── researcher_agent.py    ← Araştırmacı ajan
+│   ├── coder_agent.py         ← Yazılımcı ajan
+│   ├── critic_agent.py        ← Eleştirmen ajan
+│   ├── executor_agent.py      ← Yürütücü ajan
+│   └── profiler_agent.py      ← Profil analiz ajanı
+│
+├── tools/
+│   ├── file_manager.py        ← Dosya oluşturma/kaydetme
+│   ├── file_editor.py         ← Mevcut dosya düzenleme
+│   ├── code_runner.py         ← Kod çalıştırma
+│   ├── shell_executor.py      ← Güvenli shell komutu çalıştırma
+│   ├── web_search.py          ← Web arama
+│   ├── project_indexer.py     ← Mevcut proje analizi (/open)
+│   └── tool_registry.py       ← Araç kayıt sistemi
+│
+├── api/
+│   ├── main_api.py            ← FastAPI backend (SSE + REST)
+│   └── static/
+│       ├── index.html         ← Mobil uyumlu web arayüzü
+│       └── manifest.json      ← PWA manifest
+│
+├── ui/
+│   ├── cli.py                 ← Terminal arayüzü (Rich)
+│   └── dashboard.py           ← Dashboard bileşenleri
+│
+├── tests/
+│   ├── test_agents.py         ← 14 birim test
+│   └── test_message_bus.py    ← MessageBus testleri
+│
+└── workspace/
+    └── projects/              ← Üretilen projeler burada
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+7. KULLANILAN TEKNOLOJİLER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PYTHON KÜTÜPHANELERİ:
+  • httpx         → Async HTTP istekleri (LLM API çağrıları)
+  • fastapi       → Web API framework
+  • uvicorn       → ASGI web sunucusu
+  • rich          → Renkli terminal çıktıları
+  • python-dotenv → .env dosyası yönetimi
+  • pydantic      → Veri doğrulama
+  • pytest        → Birim testler
+
+LLM MODELLERİ:
+  • openai/gpt-oss-120b    → 117B MoE, agentic optimized
+  • openai/gpt-4o-mini     → 8B, hızlı ve ucuz
+  • llama-3.3-70b-versatile → 70B, Groq'ta bedava
+
+API SAĞLAYICILARI:
+  • OpenRouter (openrouter.ai) → 375+ model, tek API
+  • Groq (groq.com)            → Ultra hızlı inference, bedava
+
+ASYNC PROGRAMLAMA:
+  • asyncio    → Python async/await
+  • subprocess → Güvenli komut çalıştırma
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+8. ÖNEMLİ ÖZELLİKLER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ DUAL PROVIDER: Groq (bedava) + OpenRouter (ücretli) birlikte
+✅ PHASED EXECUTION: Görevler fazlara ayrılıp sırayla çalışır
+✅ DUPLIKASYON ÖNLEMİ: Coder mevcut dosyaları kontrol eder
+✅ CRITIC PUANLAMA: 5 kriterli kalite kontrol sistemi
+✅ GERÇEK KOD ÇALIŞTIRMA: subprocess ile Python kodu çalıştırır
+✅ PIP AUTO-INSTALL: Eksik kütüphaneleri otomatik yükler
+✅ WEB ARAYÜZÜ: Mobil uyumlu FastAPI + SSE (canlı log)
+✅ ZIP İNDİRME: Üretilen projeleri tek tıkla indir
+✅ /OPEN KOMUTU: Mevcut projeleri düzenleme desteği
+✅ MALİYET TAKİBİ: Her API çağrısının token ve fiyat raporu
+✅ TÜRKCe ARAYÜZ: CLI ve loglar Türkçe
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+9. MALİYET ANALİZİ
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Proje başı tahmini maliyet:
+
+  Basit proje (hesap makinesi):     ~$0.003 (~0.1 TL)
+  Orta proje (task manager):        ~$0.005 (~0.2 TL)
+  Karmaşık proje (web framework):   ~$0.010 (~0.4 TL)
+
+$16.93 bakiye ile:
+  • gpt-oss-120b kullanarak: ~3000-5000 proje
+  • gpt-4o-mini kullanarak:  ~1000-1500 proje
+
+Karşılaştırma:
+  Bu sistem    → $0.005/proje
+  GPT-4o ile   → $0.60/proje  (120x daha pahalı)
+  Claude Opus  → $2.50/proje  (500x daha pahalı)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+10. ÇALIŞTIRMA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+KURULUM:
+  pip install -r requirements.txt
+
+.ENV DOSYASI:
+  OPENROUTER_API_KEY=sk-or-...
+  GROQ_API_KEY=gsk_...
+  WEB_PASSWORD=sifre123
+
+CLI MODUNDA:
+  python main.py
+  python main.py "Python ile hesap makinesi yaz"
+
+WEB MODUNDA:
+  python -m api.main_api
+  veya: start_web.bat
+  Tarayıcıda: http://localhost:8000
+
+TEST:
+  python -m pytest tests/ -v
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+11. VERSİYON GEÇMİŞİ
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+V1 (İlk Sürüm):
+  • Temel 5 ajan yapısı
+  • Tek model (GPT-4o-mini)
+  • Basit CLI
+
+V2 (İyileştirmeler):
+  • 5 kriterli Critic puanlama sistemi
+  • Web arayüzü (FastAPI + SSE)
+  • Maliyet takip sistemi
+  • Gelişmiş hata yönetimi
+
+V3 (Mevcut - Büyük Güncelleme):
+  • Dual Provider (Groq + OpenRouter)
+  • Duplikasyon önleme sistemi
+  • /open komutu ile mevcut proje desteği
+  • ZIP indirme özelliği
+  • Critic minimum puan koruması (sert puanlama fix)
+  • gpt-oss-120b model geçişi (4x ucuz, daha kaliteli)
+  • GitHub private repo entegrasyonu
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+12. GELECEKTEKİ GELİŞTİRMELER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PLANLI:
+  • Tester Ajan: Otomatik test yazma ve çalıştırma
+  • Daha iyi Faz 2-3 yönetimi (orchestrator fix)
+  • Model otomatik seçimi (görev zorluğuna göre)
+
+İLERİ SEVİYE:
+  • Takım bazlı çalışma (5 coder, 5 planner - swarm)
+  • Paralel görev çalıştırma
+  • Proje bazlı bellek (önceki projeleri hatırlama)
+  • SaaS olarak sunma (aylık abonelik)
+
+GITHUB: https://github.com/ahmetsn702/multi-agent-system (private)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Son Güncelleme: 27 Şubat 2026
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

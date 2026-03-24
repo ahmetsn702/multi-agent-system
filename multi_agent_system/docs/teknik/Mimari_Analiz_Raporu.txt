@@ -1,0 +1,115 @@
+# Derinlemesine Mimari ve Kod Analizi (Deep-Dive V4.1)
+
+Bu doküman, Multi-Agent Orkestrasyon Sistemi'nin (V4.1) sadece varsayımsal veya yüzeysel çalışma mantığını değil, arka plandaki algoritmik yapıları, veri modellerini, yalıtım sistemini ve otonom hata giderme (self-correction) mekanizmalarını **kod seviyesinde** analiz eder.
+
+---
+
+## 1. Sistemin Kalbi: Orchestrator ve State Machine (`core/orchestrator.py`)
+
+Sistem, basit bir while döngüsü yerine karmaşık bir durum makinesi (State Machine) işlevi gören `Orchestrator` sınıfı üzerine inşa edilmiştir.
+
+### 1.1. Bağımlılık Yönlü Asiklik Grafik (DAG) ve Paralel İcra
+Planner (Planlayıcı) ajan bir görev dağılımı yaptığında, bu görevler `Task` nesneleri olarak sıraya girer. Her `Task` bir `task_id` ve `dependencies` listesine sahiptir.
+
+```python
+# Task Model (Özet)
+class Task:
+    task_id: str
+    description: str
+    assigned_to: str # "coder", "researcher", "executor"...
+    dependencies: list[str] # ["t1", "t2"]
+    status: TaskStatus # PENDING, IN_PROGRESS, COMPLETED, FAILED
+```
+
+**Algoritma:**
+1. Orchestrator, o iterasyonda durumu `PENDING` olan ve bağımlılıkları `COMPLETED` olan tüm taskları bulur (Topological Sort benzeri).
+2. Bu hazır task'ları `asyncio.gather(*tasks)` ile paralel olarak aynı anda başlatır.
+3. Bu sayede, örneğin veri tabanı kodlaması devam ederken, Frontend CLI arabiriminin tasarımı aynı esnada yapılabilir. Paralellik projenin üretim hızını x3 artırır (Rate limitlerine takılmadığı sürece).
+
+### 1.2. Görev Akış Diyagramı (ReAct Döngüsü)
+
+Aşağıdaki diyagram, bir Python görevinin baştan sona nasıl akış gösterdiğini görselleştirir:
+
+```mermaid
+graph TD
+    A[Kullanıcı Hedefi] --> B(Planner Agent)
+    B --> C{Task'lara (DAG) Bölme}
+    
+    C --> D[Task 1: Researcher]
+    C --> E[Task 2: Coder]
+    
+    D -->|Web Araması & Rapor| F[Memory / Context]
+    
+    F --> E
+    E -->|Python Kod Üretimi| G(Critic Agent)
+    
+    G -->|Skor < 6| E
+    G -->|Skor >= 6| H(Tester / Executor)
+    
+    H -->|Pytest FAIL| I[Hata Analizi (Failed Lines)]
+    I --> E
+    
+    H -->|Pytest PASS| J[Git Commit & Sonuç]
+```
+
+### 1.3. Otonom Hata Düzeltme (Retry & Fallback) Zırhı
+Bir Ajan (Özellikle Coder) hata yaptığında sistem çökmez. Orchestrator'un `_execute_task_with_retry` metodunda kritik bir koruma döngüsü (Retry Loop) vardır:
+- Limit: `MAX_RETRIES = 3`
+- Coder'ın kodu çalıştırılmazsa veya yanlış format `[FILE:...]` getirirse, oluşan `Hata Traceback` stringi veya Kritik Uyarı, Ajan'ın `Short-Term Memory` alanına eklenir. Ajan, son yaptığı hatanın farkındalığıyla tekrar tetiklenir (Self-Correction).
+- Bu kısımda `_pre_install_project_deps` isimli **STDLIB Filtresi** devreye girer. Ajanlar uydurma `import database` kütüphanelerini `pip install database` diyerek internetten çekmeye çalışmasın diye, `src/*.py` dosyaları Regex ile taranıp sisteme öğretilir.
+
+---
+
+## 2. Asenkron İletişim Ağı: Message Bus (`core/message_bus.py`)
+
+Ajanların doğrudan birbirinin metotlarını çağırması "Spagetti Kod" yaratır. Bunu önlemek için Event-Driven (Olay Güdümlü) bir `MessageBus` yapısı kurulmuştur.
+
+### 2.1. In-Memory Priority Queue
+- Python `asyncio.PriorityQueue` kullanılır. İletiler (Tuple) `(priority, counter, message)` formatında sıraya girer.
+- **Konu Aboneliği (Pub/Sub):** Her ajan (Örn. `CriticAgent`), sistem başlatılırken `bus.subscribe("code_generated", self.evaluate_code)` yordamıyla abone olur.
+- Coder kodu üretip kaydettiğinde, `bus.publish("code_generated", data="...")` ile olayı fırlatır. Orchestrator bu bağı çözer ve doğru ajana aktarır. Tıpkı devasa bir Kafka veya RabbitMQ yapısının RAM içinde çalışan halidir.
+
+---
+
+## 3. Uzmanlaşmış Model Davranışları (LLM Psikolojisi)
+
+Sistem farklı işlemler için maliyet(Token) ve beyin gücünü optimize etmek amacıyla farklı LLM modelleri kullanır (MoE - Mixture of Experts stratejisi).
+
+### 3.1. PlannerAgent (Mimar)
+- **Kullanılan Model:** `moonshotai/kimi-k2-thinking`
+- Bu model "Düşünme (Thinking)" yeteneğine sahiptir. Prompt içinde `<think>...</think>` blokları oluşturarak önce kendi kendine mantık yürütür, veritabanı mı dosya sistemi mi kullanması gerektiğini tartar. Ardından Orchestrator'un beklediği salt JSON sonucunu basar.
+- **Air-Gap Kuralı:** Planner, son güncellemeyle `Executor`ın (Çalıştırıcının) "Interactive Shell (Kullanıcı girdisi bekleyen `input()` vb)" scriptleri çalıştırmaması gerektiği yönünde çok katı (`🚨`) bir prompta sahiptir. CLI programları `sys.argv` (argparser) kullanan test edilebilir modüller (testable modules) olarak yaratmasını zorunlu kılar.
+
+### 3.2. CoderAgent (Core Mühendis)
+- **Kullanılan Model:** `mistralai/codestral-2508` (Kodlamaya özel fine-tune edilmiş 256K Context).
+- **Format Direnci:** LLM'lerin en büyük zafiyeti "Halüsinasyon" formatlarıdır. Kimi zaman markdown ` ```python `, kimi zaman `JSON` fırlatırlar. `CoderAgent`, katı bir kural setine sahiptir: Yalnızca `[FILE:dosya.py] ... [/FILE]` etiketi kullanabilir.
+- **Anti-Hallucination Parser:** `_extract_file_blocks` metodu:
+  1. Primary: Exact Regex match `[FILE:...]`
+  2. Fallback: Kapanmamış (`[/FILE]`) token limitine takılan kodları algılama.
+  3. JSON Rescue Mechanism: Modelin sapıtıp JSON dönmesi durumunda `ast.parse` ve otonom karakter kaçış (`\\n -> \n`) sistemleriyle kodu kurtarma işlemi yapar.
+
+### 3.3. TesterAgent (Sessiz Gardiyan - LLM'siz)
+- Bilinçli olarak YZ (Yapay Zeka) modellerinden arındırılmıştır. Deterministik (Kurallı) çalışır.
+- İşlevi: Ana proje kök dizininde `subprocess.run(["pytest", "-q"])` komutunu izole çevre değişkenleriyle (`env`) koşturur.
+- **V4.1 Geliştirmesi:** Eskiden test patladığında model sadece `Failed` kelimesini biliyordu. Şimdi, `stdout` çıktısı satır satır analiz edilip `FAILED` bloğunun hemen altındaki (Örn: `assert 5 == 6` hatası) kısımlar yakalanarak Coder'ın direkt hafızasına enjekte ediliyor. Model kendi hatasını loglardan okuyan bir Senior (Kıdemli) yazılımcı gibi davranabiliyor.
+
+---
+
+## 4. İzolasyon (Sandbox), Path Yalıtımı ve Tool Yetkileri
+
+LLM tabanlı ajanların "Host" (kullanıcının kendi) makinelerinde `os.system("rm -rf /")` gibi yıkıcı operasyonlar veya rasgele klasör değişimleri yapması ihtimali sistemsel kısıtla yalıtılmıştır.
+
+### 4.1. File Manager & Code Runner İzolasyonu (`tools/file_manager.py`)
+- Tüm fonksiyonlarda (`write_file`, `run_code`, `list_dir`) "Path Traversal" (Dizin atlama) koruması vardır.
+- İşlemler zorunlu olarak `project_root` (`workspace/projects/{slug}`) dışına çıkamaz. `str(Path(filepath).resolve()).startswith(str(project_root))` kontrolüyle kilitlenir. Dışarı çıkılmak istenirse `PermissionError` dönerek Ajan engellenir.
+
+---
+
+## Sonraki Adımımız Nedir? (Yol Haritamız)
+
+Mevcut yapı şu an kod standartları, maliyet verimliliği (Görev başına $\sim 0.02) ve otonom hata giderme alanında kusursuzdur. Ancak projenin kapasitesini bir AGI (Artificial General Intelligence) yazılımcısına dönüştürmek istersen, sıradaki aşama:
+
+1. **GUI (Graphical User Interface) Yazılımı İzleme:** Ajanların yazdığı "web tabanlı (JS/CSS) siteleri" veya masaüstü ekranlarını anlamaları için "Playwright Browser Subagent" kurularak ekran görüntülerini eleştirmene (Critic) sunma eklenebilir.
+2. **Unified Diff Formatı Uygulanabilirliği:** Ajanların dosyanın tamamını baştan hafızasında tutup yazması yerine `git diff` formatında sadece araya 2 satır ekleme özelliğini kodlayarak (Aider aracı gibi) token maaliyetini onda birine (%10'a) çekmek.
+
+Bu döküman, projenin mevcut V4.1 sürümünün gerçek teknolojik omurgasıdır. Aklına takılan veya değiştirmek, incelemek istediğin spesifik bir sınıf / kod yapısı var mı dostum?

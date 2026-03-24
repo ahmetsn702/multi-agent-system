@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multi-Agent System</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* === RESET & BASE === */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+--bg: #0a0a0f;
+--surface: rgba(255,255,255,0.04);
+--border: rgba(255,255,255,0.08);
+--green: #00ff88;
+--purple: #6366f1;
+--yellow: #f59e0b;
+--red: #ef4444;
+--text: #e2e8f0;
+--muted: #64748b;
+--font: 'JetBrains Mono', monospace;
+}
+
+body {
+background: var(--bg);
+color: var(--text);
+font-family: var(--font);
+min-height: 100vh;
+overflow-x: hidden;
+}
+
+/* Arka plan grid efekti */
+body::before {
+content: '';
+position: fixed;
+inset: 0;
+background-image:
+linear-gradient(rgba(99,102,241,0.03) 1px, transparent 1px),
+linear-gradient(90deg, rgba(99,102,241,0.03) 1px, transparent 1px);
+background-size: 40px 40px;
+pointer-events: none;
+z-index: 0;
+}
+
+/* === HEADER === */
+header {
+position: sticky;
+top: 0;
+z-index: 100;
+background: rgba(10,10,15,0.9);
+backdrop-filter: blur(20px);
+border-bottom: 1px solid var(--border);
+padding: 16px 24px;
+display: flex;
+align-items: center;
+justify-content: space-between;
+}
+
+.logo {
+font-size: 14px;
+font-weight: 700;
+color: var(--green);
+letter-spacing: 2px;
+text-transform: uppercase;
+}
+
+.status-badge {
+display: flex;
+align-items: center;
+gap: 8px;
+font-size: 12px;
+color: var(--muted);
+}
+
+.status-dot {
+width: 8px;
+height: 8px;
+border-radius: 50%;
+background: var(--green);
+box-shadow: 0 0 8px var(--green);
+animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+0%, 100% { opacity: 1; }
+50% { opacity: 0.4; }
+}
+
+/* === MAIN LAYOUT === */
+main {
+position: relative;
+z-index: 1;
+display: grid;
+grid-template-columns: 420px 1fr;
+gap: 0;
+height: calc(100vh - 57px);
+}
+
+/* === LEFT PANEL === */
+.left-panel {
+border-right: 1px solid var(--border);
+padding: 24px;
+overflow-y: auto;
+display: flex;
+flex-direction: column;
+gap: 20px;
+}
+
+.panel-title {
+font-size: 11px;
+font-weight: 600;
+color: var(--muted);
+letter-spacing: 2px;
+text-transform: uppercase;
+}
+
+/* Textarea */
+textarea {
+width: 100%;
+background: var(--surface);
+border: 1px solid var(--border);
+border-radius: 8px;
+color: var(--text);
+font-family: var(--font);
+font-size: 13px;
+padding: 16px;
+resize: none;
+height: 120px;
+transition: border-color 0.2s;
+outline: none;
+}
+
+textarea:focus {
+border-color: var(--purple);
+box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
+}
+
+textarea::placeholder { color: var(--muted); }
+
+/* Butonlar */
+.btn {
+display: inline-flex;
+align-items: center;
+justify-content: center;
+gap: 8px;
+padding: 10px 20px;
+border-radius: 6px;
+font-family: var(--font);
+font-size: 12px;
+font-weight: 600;
+cursor: pointer;
+transition: all 0.2s;
+border: none;
+letter-spacing: 0.5px;
+}
+
+.btn-primary {
+background: var(--purple);
+color: white;
+}
+
+.btn-primary:hover { filter: brightness(1.2); }
+
+.btn-success {
+background: var(--green);
+color: #0a0a0f;
+}
+
+.btn-success:hover { filter: brightness(1.1); }
+
+.btn-ghost {
+background: var(--surface);
+color: var(--text);
+border: 1px solid var(--border);
+}
+
+.btn-ghost:hover { background: rgba(255,255,255,0.08); }
+
+.btn-danger {
+background: transparent;
+color: var(--red);
+border: 1px solid rgba(239,68,68,0.3);
+}
+
+.btn-danger:hover { background: rgba(239,68,68,0.1); }
+
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-row {
+display: flex;
+gap: 8px;
+flex-wrap: wrap;
+}
+
+/* Plan önizleme */
+.plan-preview {
+display: none;
+flex-direction: column;
+gap: 12px;
+}
+
+.plan-preview.visible { display: flex; }
+
+.phase-card {
+background: var(--surface);
+border: 1px solid var(--border);
+border-radius: 8px;
+overflow: hidden;
+}
+
+.phase-header {
+padding: 12px 16px;
+background: rgba(99,102,241,0.08);
+border-bottom: 1px solid var(--border);
+font-size: 12px;
+font-weight: 600;
+color: var(--purple);
+display: flex;
+align-items: center;
+gap: 8px;
+}
+
+.phase-tasks {
+padding: 12px 16px;
+display: flex;
+flex-direction: column;
+gap: 8px;
+}
+
+.task-item {
+display: flex;
+align-items: center;
+gap: 10px;
+font-size: 12px;
+color: var(--muted);
+padding: 6px 8px;
+border-radius: 4px;
+border-left: 2px solid transparent;
+}
+
+.task-item.active {
+color: var(--text);
+border-left-color: var(--green);
+background: rgba(0,255,136,0.05);
+}
+
+.task-item.done {
+color: var(--green);
+border-left-color: var(--green);
+}
+
+/* Feedback alanı */
+.feedback-area {
+display: none;
+}
+
+.feedback-area.visible { display: block; }
+
+.plan-meta {
+font-size: 11px;
+color: var(--muted);
+padding: 8px 12px;
+background: var(--surface);
+border-radius: 6px;
+border: 1px solid var(--border);
+}
+
+/* === RIGHT PANEL === */
+.right-panel {
+padding: 24px;
+overflow-y: auto;
+display: flex;
+flex-direction: column;
+gap: 20px;
+}
+
+/* Ajan durumu */
+.agent-status {
+display: flex;
+gap: 8px;
+flex-wrap: wrap;
+}
+
+.agent-badge {
+display: flex;
+align-items: center;
+gap: 6px;
+padding: 6px 12px;
+border-radius: 20px;
+font-size: 11px;
+font-weight: 500;
+background: var(--surface);
+border: 1px solid var(--border);
+color: var(--muted);
+transition: all 0.3s;
+}
+
+.agent-badge.active {
+color: var(--green);
+border-color: var(--green);
+background: rgba(0,255,136,0.08);
+box-shadow: 0 0 12px rgba(0,255,136,0.15);
+}
+
+.agent-badge.done {
+color: var(--purple);
+border-color: var(--purple);
+background: rgba(99,102,241,0.08);
+}
+
+.agent-dot {
+width: 6px;
+height: 6px;
+border-radius: 50%;
+background: currentColor;
+}
+
+.agent-badge.active .agent-dot {
+animation: pulse 1s ease-in-out infinite;
+}
+
+/* Log kutusu */
+.log-box {
+background: rgba(0,0,0,0.4);
+border: 1px solid var(--border);
+border-radius: 8px;
+padding: 16px;
+height: 300px;
+overflow-y: auto;
+font-size: 12px;
+line-height: 1.8;
+flex-shrink: 0;
+}
+
+.log-line {
+color: var(--muted);
+display: flex;
+gap: 8px;
+align-items: flex-start;
+}
+
+.log-line.info { color: var(--text); }
+.log-line.success { color: var(--green); }
+.log-line.error { color: var(--red); }
+.log-line.warning { color: var(--yellow); }
+
+.log-time {
+color: var(--muted);
+flex-shrink: 0;
+font-size: 10px;
+margin-top: 2px;
+}
+
+/* Sonuç kartı */
+.result-card {
+display: none;
+background: var(--surface);
+border: 1px solid var(--green);
+border-radius: 8px;
+padding: 24px;
+gap: 16px;
+flex-direction: column;
+}
+
+.result-card.visible {
+display: flex;
+animation: slideIn 0.4s ease;
+}
+
+@keyframes slideIn {
+from { opacity: 0; transform: translateY(10px); }
+to   { opacity: 1; transform: translateY(0); }
+}
+
+.result-title {
+font-size: 16px;
+font-weight: 700;
+color: var(--green);
+}
+
+.result-stats {
+display: grid;
+grid-template-columns: 1fr 1fr;
+gap: 12px;
+}
+
+.stat-item {
+background: rgba(0,0,0,0.3);
+border-radius: 6px;
+padding: 12px;
+}
+
+.stat-label {
+font-size: 10px;
+color: var(--muted);
+letter-spacing: 1px;
+text-transform: uppercase;
+margin-bottom: 4px;
+}
+
+/* Faz ilerleme çubuğu */
+.phase-progress-container {
+display: none;
+flex-direction: column;
+gap: 10px;
+padding: 16px;
+background: var(--surface);
+border: 1px solid var(--border);
+border-radius: 8px;
+}
+
+.phase-progress-container.visible {
+display: flex;
+}
+
+.phase-progress-title {
+font-size: 11px;
+font-weight: 600;
+color: var(--muted);
+letter-spacing: 2px;
+text-transform: uppercase;
+}
+
+.phase-row {
+display: flex;
+flex-direction: column;
+gap: 6px;
+}
+
+.phase-row-header {
+display: flex;
+justify-content: space-between;
+font-size: 12px;
+}
+
+.phase-row-name {
+color: var(--text);
+font-weight: 500;
+}
+
+.phase-row-count {
+color: var(--muted);
+font-size: 11px;
+}
+
+.progress-bar-bg {
+width: 100%;
+height: 4px;
+background: rgba(255,255,255,0.08);
+border-radius: 2px;
+overflow: hidden;
+}
+
+.progress-bar-fill {
+height: 100%;
+border-radius: 2px;
+background: var(--green);
+transition: width 0.5s ease;
+width: 0%;
+box-shadow: 0 0 8px rgba(0,255,136,0.4);
+}
+
+.progress-bar-fill.done {
+background: var(--purple);
+box-shadow: 0 0 8px rgba(99,102,241,0.4);
+}
+
+.phase-status-icon {
+font-size: 10px;
+margin-right: 6px;
+}
+
+/* Memory Panel */
+.memory-panel {
+display: none;
+flex-direction: column;
+gap: 12px;
+padding: 16px;
+background: var(--surface);
+border: 1px solid var(--border);
+border-radius: 8px;
+margin-top: 20px;
+max-height: 300px;
+overflow-y: auto;
+}
+
+.memory-panel.visible {
+display: flex;
+}
+
+.memory-toggle {
+display: flex;
+align-items: center;
+justify-content: space-between;
+cursor: pointer;
+padding: 8px 0;
+color: var(--muted);
+font-size: 11px;
+font-weight: 600;
+letter-spacing: 2px;
+text-transform: uppercase;
+transition: color 0.2s;
+}
+
+.memory-toggle:hover {
+color: var(--text);
+}
+
+.memory-item {
+padding: 10px;
+background: rgba(255,255,255,0.02);
+border: 1px solid var(--border);
+border-radius: 6px;
+font-size: 11px;
+}
+
+.memory-item-goal {
+color: var(--text);
+font-weight: 500;
+margin-bottom: 4px;
+}
+
+.memory-item-meta {
+color: var(--muted);
+font-size: 10px;
+display: flex;
+gap: 12px;
+flex-wrap: wrap;
+}
+
+.memory-item-tags {
+margin-top: 6px;
+display: flex;
+gap: 4px;
+flex-wrap: wrap;
+}
+
+.memory-tag {
+padding: 2px 6px;
+background: rgba(99,102,241,0.15);
+border: 1px solid rgba(99,102,241,0.3);
+border-radius: 3px;
+color: var(--purple);
+font-size: 9px;
+}
+
+
+.stat-value {
+font-size: 20px;
+font-weight: 700;
+color: var(--text);
+}
+
+/* === RESPONSIVE === */
+@media (max-width: 768px) {
+main {
+grid-template-columns: 1fr;
+grid-template-rows: auto 1fr;
+height: auto;
+}
+.left-panel { border-right: none; border-bottom: 1px solid var(--border); }
+}
+
+/* Confetti */
+.confetti-container {
+position: fixed;
+inset: 0;
+pointer-events: none;
+z-index: 999;
+display: none;
+}
+
+.confetti-piece {
+position: absolute;
+width: 8px;
+height: 8px;
+top: -10px;
+animation: confettiFall 3s ease-in forwards;
+}
+
+@keyframes confettiFall {
+to { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+}
+</style>
+</head>
+<body>
+
+<header>
+<div class="logo">⬡ Multi-Agent System</div>
+<div class="status-badge">
+<span class="status-dot"></span>
+<span id="status-text">Hazır</span>
+</div>
+</header>
+
+<main>
+<!-- SOL PANEL -->
+<div class="left-panel">
+<div class="panel-title">Hedef</div>
+
+<textarea id="goal-input"
+placeholder="Ne yapmamı istiyorsun?&#10;&#10;Örnek: Flask ile kullanıcı giriş sistemi yaz, JWT kullan, SQLite veritabanı olsun."></textarea>
+
+<div class="btn-row">
+<button class="btn btn-primary" id="btn-plan" onclick="getPlan()">🧠 Plan Al</button>
+<button class="btn btn-ghost" id="btn-quick" onclick="runQuick()">⚡ Direkt Çalıştır</button>
+</div>
+
+<!-- Plan önizleme (gizli, plan geldikten sonra görünür) -->
+<div class="plan-preview" id="plan-preview">
+<div class="panel-title">Plan Önizleme</div>
+<div id="plan-meta" class="plan-meta"></div>
+<div id="phases-container"></div>
+
+<!-- Feedback alanı -->
+<div class="feedback-area" id="feedback-area">
+<textarea id="feedback-input"
+placeholder="Değişiklik notun? (örn: Faz 2'ye JWT ekle)"
+style="height: 80px; margin-bottom: 8px;"></textarea>
+</div>
+
+<div class="btn-row">
+<button class="btn btn-success" onclick="approvePlan()">✓ Onayla ve Başlat</button>
+<button class="btn btn-ghost" onclick="toggleFeedback()">✎ Not Ekle</button>
+<button class="btn btn-danger" onclick="cancelPlan()">✗ İptal</button>
+</div>
+</div>
+
+<!-- Memory Panel (toggle ile açılır) -->
+<div class="memory-toggle" onclick="toggleMemory()">
+<span>💾 Proje Hafızası</span>
+<span id="memory-arrow">▼</span>
+</div>
+<div class="memory-panel" id="memory-panel">
+<div id="memory-content" style="color: var(--muted); font-size: 11px;">
+Yükleniyor...
+</div>
+</div>
+</div>
+
+<!-- SAĞ PANEL -->
+<div class="right-panel">
+<div class="panel-title">Sistem Durumu</div>
+
+<!-- Ajan durumu -->
+<div class="agent-status" id="agent-status">
+<div class="agent-badge" id="agent-planner">
+<span class="agent-dot"></span>🧠 Planner
+</div>
+<div class="agent-badge" id="agent-researcher">
+<span class="agent-dot"></span>🔬 Researcher
+</div>
+<div class="agent-badge" id="agent-coder">
+<span class="agent-dot"></span>💻 Coder
+</div>
+<div class="agent-badge" id="agent-critic">
+<span class="agent-dot"></span>🔍 Critic
+</div>
+<div class="agent-badge" id="agent-executor">
+<span class="agent-dot"></span>⚙️ Executor
+</div>
+<div class="agent-badge" id="agent-tester">
+<span class="agent-dot"></span>🧪 Tester
+</div>
+<div class="agent-badge" id="agent-linter">
+<span class="agent-dot"></span>📏 Linter
+</div>
+</div>
+
+<!-- Faz İlerleme -->
+<div class="phase-progress-container" id="phase-progress">
+<div class="phase-progress-title">⬡ Faz İlerlemesi</div>
+<div id="phase-rows"></div>
+</div>
+
+<!-- Canlı log -->
+<div class="panel-title">Canlı Log</div>
+<div class="log-box" id="log-box">
+<div class="log-line" style="color: var(--muted);">Sistem hazır. Bir hedef yaz ve başlat.</div>
+</div>
+
+<!-- Sonuç kartı (gizli) -->
+<div class="result-card" id="result-card">
+<div class="result-title">✅ Tamamlandı!</div>
+<div class="result-stats" id="result-stats"></div>
+<div class="btn-row" id="result-actions"></div>
+</div>
+</div>
+</main>
+
+<div class="confetti-container" id="confetti"></div>
+
+<script>
+let currentPlan = null;
+let currentGoal = '';
+let isRunning = false;
+let phaseData = [];  // Faz verileri: [{name, total, done}]
+
+// ── Plan Al ─────────────────────────────────────────
+async function getPlan() {
+const goal = document.getElementById('goal-input').value.trim();
+if (!goal) { alert('Lütfen bir hedef yaz.'); return; }
+
+currentGoal = goal;
+document.getElementById('btn-plan').disabled = true;
+document.getElementById('btn-plan').textContent = '⏳ Planlanıyor...';
+addLog('Planner çalışıyor...', 'info');
+setAgentActive('planner');
+
+try {
+const res = await fetch('/plan', {
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify({ goal }),
+});
+
+if (!res.ok) throw new Error(await res.text());
+
+const data = await res.json();
+currentPlan = data.plan;
+showPlanPreview(data);
+setAgentDone('planner');
+addLog(`Plan hazır: ${data.summary}`, 'success');
+} catch (e) {
+addLog(`Hata: ${e.message}`, 'error');
+setAgentIdle('planner');
+} finally {
+document.getElementById('btn-plan').disabled = false;
+document.getElementById('btn-plan').textContent = '🧠 Plan Al';
+}
+}
+
+// ── Plan Göster ──────────────────────────────────────
+function showPlanPreview(data) {
+document.getElementById('plan-meta').textContent =
+`📊 ${data.summary} — Tahmini maliyet: ~$0.01-0.03`;
+
+const container = document.getElementById('phases-container');
+container.innerHTML = '';
+
+const agentEmojis = {
+planner: '🧠', researcher: '🔬', coder: '💻',
+critic: '🔍', executor: '⚙️', tester: '🧪', linter: '📏'
+};
+
+(data.phases || []).forEach(phase => {
+const tasksHtml = phase.tasks.map(t => `
+<div class="task-item">
+<span>${agentEmojis[t.agent] || '•'}</span>
+<span>${t.description.slice(0, 60)}${t.description.length > 60 ? '...' : ''}</span>
+</div>
+`).join('');
+
+container.innerHTML += `
+<div class="phase-card">
+<div class="phase-header">
+<span>⬡</span>
+Faz ${phase.phase_number}: ${phase.name}
+<span style="margin-left:auto;font-size:10px;color:var(--muted)">${phase.task_count} görev</span>
+</div>
+<div class="phase-tasks">${tasksHtml}</div>
+</div>
+`;
+});
+
+// Faz verilerini kaydet
+phaseData = (data.phases || []).map(p => ({
+name: p.name,
+total: p.task_count,
+done: 0,
+}));
+
+document.getElementById('plan-preview').classList.add('visible');
+}
+
+// ── Onayla ──────────────────────────────────────────
+async function approvePlan() {
+const feedback = document.getElementById('feedback-input').value.trim();
+await startRun(currentGoal, currentPlan, feedback);
+}
+
+// ── Direkt Çalıştır ─────────────────────────────────
+async function runQuick() {
+const goal = document.getElementById('goal-input').value.trim();
+if (!goal) { alert('Lütfen bir hedef yaz.'); return; }
+
+currentGoal = goal;
+await startRun(goal, null, '');
+}
+
+// ── Çalıştır (SSE) ──────────────────────────────────
+async function startRun(goal, plan, feedback) {
+if (isRunning) return;
+isRunning = true;
+
+resetAgents();
+clearLog();
+document.getElementById('result-card').classList.remove('visible');
+document.getElementById('status-text').textContent = 'Çalışıyor...';
+addLog(`Başlatılıyor: ${goal.slice(0, 60)}...`, 'info');
+
+// Faz ilerleme çubuklarını başlat
+initPhaseProgress();
+
+const response = await fetch('/run-with-plan', {
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify({ goal, plan, feedback }),
+});
+
+const reader = response.body.getReader();
+const decoder = new TextDecoder();
+
+while (true) {
+const { done, value } = await reader.read();
+if (done) break;
+
+const text = decoder.decode(value);
+const lines = text.split('\n');
+
+for (const line of lines) {
+if (!line.startsWith('data: ')) continue;
+
+try {
+const data = JSON.parse(line.slice(6));
+
+if (data.ping) continue;
+
+if (data.message) {
+handleLogMessage(data.message, data.level || 'info');
+}
+
+if (data.done) {
+handleResult(data.result);
+}
+} catch(e) {}
+}
+}
+
+isRunning = false;
+document.getElementById('status-text').textContent = 'Hazır';
+}
+
+// ── Log mesajını işle + ajan durumu güncelle ─────────
+function handleLogMessage(message, level) {
+addLog(message, level);
+
+const lower = message.toLowerCase();
+
+if (lower.includes('planner') || lower.includes('planlıyor')) setAgentActive('planner');
+else if (lower.includes('planner') && lower.includes('✅')) setAgentDone('planner');
+
+if (lower.includes('researcher') || lower.includes('araştır')) setAgentActive('researcher');
+if (lower.includes('coder') || lower.includes('yazılım')) setAgentActive('coder');
+if (lower.includes('critic') || lower.includes('eleştiri')) setAgentActive('critic');
+if (lower.includes('executor') || lower.includes('yürüt')) setAgentActive('executor');
+if (lower.includes('tester') || lower.includes('test')) setAgentActive('tester');
+if (lower.includes('linter') || lower.includes('lint')) setAgentActive('linter');
+
+if (lower.includes('✅') || lower.includes('tamamlandı')) {
+if (lower.includes('researcher')) setAgentDone('researcher');
+if (lower.includes('coder')) setAgentDone('coder');
+if (lower.includes('critic')) setAgentDone('critic');
+if (lower.includes('executor')) setAgentDone('executor');
+if (lower.includes('tester')) setAgentDone('tester');
+if (lower.includes('linter')) setAgentDone('linter');
+}
+
+// Faz ilerlemesini güncelle
+updatePhaseProgress(message);
+}
+
+// ── Sonucu göster ────────────────────────────────────
+function handleResult(result) {
+if (!result) return;
+
+const stats = [
+{ label: 'Tamamlanan Görev', value: result.tasks_completed || '—' },
+{ label: 'Oluşturulan Dosya', value: (result.task_details || []).length || '—' },
+{ label: 'Maliyet', value: result.cost_usd ? `$${result.cost_usd.toFixed(4)}` : '—' },
+{ label: 'Kod Kalitesi', value: result.avg_critic_score ? `${result.avg_critic_score.toFixed(1)}/10` : '—' },
+];
+
+document.getElementById('result-stats').innerHTML = stats.map(s => `
+<div class="stat-item">
+<div class="stat-label">${s.label}</div>
+<div class="stat-value">${s.value}</div>
+</div>
+`).join('');
+
+const slug = result.project_slug || '';
+document.getElementById('result-actions').innerHTML = slug ? `
+<button class="btn btn-success" onclick="downloadZip('${slug}')">⬇ ZIP İndir</button>
+<button class="btn btn-ghost" onclick="resetAll()">+ Yeni Proje</button>
+` : `
+<button class="btn btn-ghost" onclick="resetAll()">+ Yeni Proje</button>
+`;
+
+document.getElementById('result-card').classList.add('visible');
+showConfetti();
+allAgentsDone();
+}
+
+// ── Yardımcı Fonksiyonlar ────────────────────────────
+function addLog(message, level = 'info') {
+const box = document.getElementById('log-box');
+const now = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+const div = document.createElement('div');
+div.className = `log-line ${level}`;
+div.innerHTML = `<span class="log-time">${now}</span><span>${message}</span>`;
+box.appendChild(div);
+box.scrollTop = box.scrollHeight;
+}
+
+function clearLog() {
+document.getElementById('log-box').innerHTML = '';
+}
+
+function setAgentActive(name) {
+const el = document.getElementById(`agent-${name}`);
+if (el) { el.className = 'agent-badge active'; }
+}
+
+function setAgentDone(name) {
+const el = document.getElementById(`agent-${name}`);
+if (el) { el.className = 'agent-badge done'; }
+}
+
+function setAgentIdle(name) {
+const el = document.getElementById(`agent-${name}`);
+if (el) { el.className = 'agent-badge'; }
+}
+
+function resetAgents() {
+['planner','researcher','coder','critic','executor','tester','linter'].forEach(setAgentIdle);
+}
+
+function allAgentsDone() {
+['planner','researcher','coder','critic','executor','tester','linter'].forEach(setAgentDone);
+}
+
+function toggleFeedback() {
+const area = document.getElementById('feedback-area');
+area.classList.toggle('visible');
+}
+
+function cancelPlan() {
+currentPlan = null;
+document.getElementById('plan-preview').classList.remove('visible');
+document.getElementById('feedback-area').classList.remove('visible');
+addLog('Plan iptal edildi.', 'warning');
+}
+
+function resetAll() {
+cancelPlan();
+clearLog();
+resetAgents();
+document.getElementById('result-card').classList.remove('visible');
+document.getElementById('goal-input').value = '';
+phaseData = [];
+document.getElementById('phase-progress').classList.remove('visible');
+document.getElementById('phase-rows').innerHTML = '';
+addLog('Sistem hazır.', 'info');
+}
+
+// Faz ilerleme çubuklarını oluştur
+function initPhaseProgress() {
+if (!phaseData.length) return;
+
+const container = document.getElementById('phase-progress');
+const rows = document.getElementById('phase-rows');
+rows.innerHTML = '';
+
+phaseData.forEach((phase, i) => {
+rows.innerHTML += `
+<div class="phase-row" id="phase-row-${i}">
+<div class="phase-row-header">
+<span class="phase-row-name">
+<span class="phase-status-icon" id="phase-icon-${i}">○</span>
+Faz ${i + 1}: ${phase.name}
+</span>
+<span class="phase-row-count" id="phase-count-${i}">0 / ${phase.total}</span>
+</div>
+<div class="progress-bar-bg">
+<div class="progress-bar-fill" id="phase-bar-${i}"></div>
+</div>
+</div>
+`;
+});
+
+container.classList.add('visible');
+}
+
+// Faz ilerlemesini güncelle
+function updatePhaseProgress(message) {
+const lower = message.toLowerCase();
+
+// Hangi faz aktif?
+const phaseMatch = lower.match(/faz\s*(\d+)|phase\s*(\d+)|p(\d+)_/);
+if (phaseMatch) {
+const phaseNum = parseInt(phaseMatch[1] || phaseMatch[2] || phaseMatch[3]) - 1;
+if (phaseNum >= 0 && phaseNum < phaseData.length) {
+document.getElementById(`phase-icon-${phaseNum}`).textContent = '●';
+}
+}
+
+// Görev tamamlandı mı?
+if (lower.includes('✅') || lower.includes('tamamland') || lower.includes('complete')) {
+// Aktif fazda sayacı artır
+for (let i = 0; i < phaseData.length; i++) {
+if (phaseData[i].done < phaseData[i].total) {
+phaseData[i].done = Math.min(phaseData[i].done + 1, phaseData[i].total);
+const pct = (phaseData[i].done / phaseData[i].total) * 100;
+const bar = document.getElementById(`phase-bar-${i}`);
+const count = document.getElementById(`phase-count-${i}`);
+const icon = document.getElementById(`phase-icon-${i}`);
+
+if (bar) bar.style.width = pct + '%';
+if (count) count.textContent = `${phaseData[i].done} / ${phaseData[i].total}`;
+
+if (phaseData[i].done === phaseData[i].total) {
+if (bar) bar.classList.add('done');
+if (icon) icon.textContent = '✓';
+}
+break;
+}
+}
+}
+}
+
+function showConfetti() {
+const container = document.getElementById('confetti');
+container.style.display = 'block';
+container.innerHTML = '';
+
+const colors = ['#00ff88', '#6366f1', '#f59e0b', '#ef4444', '#ffffff'];
+
+for (let i = 0; i < 60; i++) {
+const piece = document.createElement('div');
+piece.className = 'confetti-piece';
+piece.style.cssText = `
+left: ${Math.random() * 100}%;
+background: ${colors[Math.floor(Math.random() * colors.length)]};
+border-radius: ${Math.random() > 0.5 ? '50%' : '0'};
+animation-delay: ${Math.random() * 1}s;
+animation-duration: ${2 + Math.random() * 2}s;
+`;
+container.appendChild(piece);
+}
+
+setTimeout(() => { container.style.display = 'none'; }, 4000);
+}
+
+// ZIP indirme fonksiyonu (IDM'yi bypass et)
+async function downloadZip(slug) {
+try {
+const response = await fetch(`/download/${slug}`);
+if (!response.ok) throw new Error('İndirme başarısız');
+
+const blob = await response.blob();
+const url = window.URL.createObjectURL(blob);
+const a = document.createElement('a');
+a.style.display = 'none';
+a.href = url;
+a.download = `${slug}.zip`;
+document.body.appendChild(a);
+a.click();
+window.URL.revokeObjectURL(url);
+document.body.removeChild(a);
+} catch (e) {
+alert(`Hata: ${e.message}`);
+}
+}
+
+// Enter ile plan al
+document.getElementById('goal-input').addEventListener('keydown', e => {
+if (e.key === 'Enter' && e.ctrlKey) getPlan();
+});
+
+// ── Memory Panel ─────────────────────────────────────
+let memoryLoaded = false;
+
+async function toggleMemory() {
+const panel = document.getElementById('memory-panel');
+const arrow = document.getElementById('memory-arrow');
+const isVisible = panel.classList.contains('visible');
+
+if (isVisible) {
+panel.classList.remove('visible');
+arrow.textContent = '▼';
+} else {
+panel.classList.add('visible');
+arrow.textContent = '▲';
+if (!memoryLoaded) {
+await loadMemory();
+memoryLoaded = true;
+}
+}
+}
+
+async function loadMemory() {
+const content = document.getElementById('memory-content');
+content.innerHTML = '<div style="color: var(--muted);">Yükleniyor...</div>';
+
+try {
+const res = await fetch('/memory');
+if (!res.ok) throw new Error('Hafıza yüklenemedi');
+
+const data = await res.json();
+const projects = data.projects || [];
+
+if (projects.length === 0) {
+content.innerHTML = '<div style="color: var(--muted);">Henüz kayıtlı proje yok.</div>';
+return;
+}
+
+let html = '';
+projects.slice(0, 10).forEach(p => {
+const goal = p.goal.substring(0, 60);
+const date = p.created_at.substring(0, 10);
+const files = p.files.length;
+const cost = p.cost.toFixed(4);
+const tags = p.tags || [];
+
+html += `
+<div class="memory-item">
+<div class="memory-item-goal">${goal}</div>
+<div class="memory-item-meta">
+<span>📅 ${date}</span>
+<span>📄 ${files} dosya</span>
+<span>💰 $${cost}</span>
+</div>
+${tags.length > 0 ? `
+<div class="memory-item-tags">
+${tags.map(t => `<span class="memory-tag">${t}</span>`).join('')}
+</div>
+` : ''}
+</div>
+`;
+});
+
+content.innerHTML = html;
+} catch (e) {
+content.innerHTML = `<div style="color: var(--red);">Hata: ${e.message}</div>`;
+}
+}
+</script>
+
+</body>
+</html>

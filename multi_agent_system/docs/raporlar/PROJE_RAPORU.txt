@@ -1,0 +1,114 @@
+================================================================
+  ÇOKLU AJAN ORKESTRASYon SİSTEMİ — PROJE DURUM RAPORU
+  Tarih: 28 Şubat 2026
+================================================================
+
+1. GENEL BAKIŞ
+--------------
+Proje, birden fazla yapay zeka ajanının bir araya gelerek yazılım
+geliştirme görevlerini otonom olarak tamamlamasını sağlayan bir
+orkestrasyon sistemidir.
+
+Kullanıcı bir doğal dil komutu girer (ör. "Python ile hesap
+makinesi yaz"), sistem bunu otomatik olarak planlar, araştırır,
+kodlar, test eder ve Git'e kaydeder.
+
+
+2. AJAN MİMARİSİ
+-----------------
+  Görev       Ajan            Model                   Fiyat (input/output)
+  --------    ----------      ---------------------   --------------------
+  Planlama    PlannerAgent    Qwen3 235B A22B         $0.071 / $0.14 /M
+  Araştırma   ResearcherAgent GPT-OSS 120B            $0.039 / $0.19 /M
+  Kodlama     CoderAgent      Grok 4 Fast (xAI)       $0.20  / $0.50 /M
+  Eleştiri    CriticAgent     GPT-OSS 120B            $0.039 / $0.19 /M
+  Yürütme     ExecutorAgent   GPT-OSS 120B            $0.039 / $0.19 /M
+  Test        TesterAgent     (pytest alt-süreç)      Ücretsiz
+  Özet        Orchestrator    GPT-4o-mini             $0.15  / $0.60 /M
+
+  Ortalama görev maliyeti: ~$0.01–$0.05 arası
+
+
+3. ÇALIŞAN ÖZELLİKLER (V4)
+----------------------------
+  [x] Çok aşamalı (phased) ve düz (flat) plan modları
+  [x] Paralel görev çalıştırma
+  [x] Git entegrasyonu (otomatik commit + revert)
+  [x] Pytest entegrasyonu (TesterAgent)
+  [x] Proje şablonları (Flask API, CLI, SQLite, Tkinter)
+  [x] requirements.txt otomatik üretimi
+  [x] Docker korumalı alan (Docker yoksa subprocess fallback)
+  [x] RAG altyapısı (basit keyword arama)
+  [x] Karışık Ajan Kümeleri (Mixture of Agents) altyapısı
+  [x] Toplu dosya düzenleme (bulk_edit)
+  [x] FastAPI + SSE ile web arayüzü (Android'den erişilebilir)
+
+
+4. BU OTURUMDA YAPILAN DÜZELTMELER
+------------------------------------
+  [x] Critic Ajanı — hep 5/10 verme sorunu çözüldü
+      Neden: gpt-oss-120b JSON parse edilemiyordu, score 0'a düşüp
+             floor mekanizması 5.0 atıyordu.
+      Çözüm: JSON parse başarısızsa otomatik retry eklendi.
+
+  [x] Dosya Sayacı — "toplam dosya: 0" sorunu çözüldü
+      Neden: Orchestrator yanlış dict path'inde saved_files arıyordu.
+      Çözüm: 3 farklı path'te arama yapacak şekilde güncellendi.
+
+  [x] Import Yolu — "ModuleNotFoundError: No module named 'src'"
+      Neden: Coder, modülleri "src.modul" şeklinde import ediyordu.
+      Çözüm: Coder promptuna IMPORT KURALLARI bölümü eklendi:
+             - main.py her zaman sys.path.insert ile başlamalı
+             - ASLA "src.modul" yazma, doğrudan "modul" yaz
+
+  [x] JSON Metin → .py Sorunu — output.py'nin içi JSON çıkıyordu
+      Neden: Fallback kod, [FILE:] bloğu bulunamazsa tüm LLM
+             çıktısını (JSON dahil) dosyaya yazıyordu.
+      Çözüm: Tehlikeli fallback kaldırıldı. Şimdi [FILE:] bloğu
+             bulunamazsa → LLM'e retry yapılıyor, sıkı prompt ile.
+
+  [x] Coder Model Değişikliği
+      Eski: Qwen3 Coder Next (80B total, 3B aktif, $0.12/$0.75)
+      Yeni: Grok 4 Fast (parametre gizli, 2M context, $0.20/$0.50)
+      Fark: Output %33 ucuzladı, context 262K → 2.000.000 token
+
+
+5. KALAN SORUNLAR
+------------------
+  [ ] test_sayi_tahmin_oyunu.py — eski oturumdan kalan bozuk test
+      dosyası proje klasöründe duruyor ve her çalışmada 3 hata
+      üretiyor. Tester bunu Coder'a göndermiyor, geçiyor.
+
+  [ ] Executor — interactive program çalıştırmaya hâlâ zaman zaman
+      kalkışıyor, 3 retry sonra fail ediyor. Planner'ın bunu
+      engelleyen kuralı var ama bazen görmezden geliyor.
+
+  [ ] output.py sorunu kısmen çözüldü. Grok bazen [FILE:] yerine
+      önce JSON analiz verebiliyor. Retry mekanizması eklendi ama
+      Grok'un bu davranışı tamamen önlemek için sistem promptu
+      daha da sertleştirilebilir.
+
+
+6. TEST SONUÇLARI
+------------------
+  Görev                   Durum    Maliyet   Süre (tahmini)
+  ----------------------  -------  --------  --------------
+  Hesap Makinesi          ✅       $0.0084   ~45 saniye
+  Sayı Tahmin Oyunu       ⚠️       $0.0125   ~60 saniye
+  (Kodu üretildi, ama etkileşimli test edilemedi)
+  Görev Yönetim Sistemi   ✅       $0.0447   ~3 dakika
+
+
+7. TAVSİYELER
+--------------
+  - Coder prompt'u daha da sertleştirilebilir (özellikle [FILE:]
+    formatı için "YALNIZCA BU FORMAT" uyarısı)
+  - TesterAgent hata detaylarını Coder'a iletecek şekilde
+    geliştirilebilir (şu an pass geçiyor)
+  - Executor'ın interactive programları çalıştırma girişimi
+    tamamen engellenebilir (plan aşamasında filtrelenebilir)
+
+================================================================
+  Hazırlayan: Antigravity (Gemini Ajanı)
+  Sistem: Çoklu Ajan Orkestrasyon Sistemi V4
+================================================================

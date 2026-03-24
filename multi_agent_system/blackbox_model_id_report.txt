@@ -1,0 +1,78 @@
+BLACKBOX MODEL ID RAPORU
+Tarih: 2026-03-16
+
+Konu
+Blackbox API ile calismasi icin model isimleri duzeltildi.
+
+Sorun Neydi
+Onceki model isimleri OpenRouter tarzi veya docs'tan tahmin edilen kisa formatta
+yaziliyordu. Blackbox API, bu key icin /v1/models endpoint'inde donen tam model
+id degerlerini bekliyor.
+
+Bu nedenle su tip hatalar aliniyordu:
+- Invalid model name passed in model=claude-sonnet-4.6
+- Invalid model name passed in model=gemini-3.1-pro-preview
+
+Temel Sonuc
+Sorun kredi degil, model id format uyumsuzluguydu.
+
+Format Donusumu
+Asagidaki gibi cevrildi:
+
+1. Claude Sonnet
+Eski:
+anthropic/claude-sonnet-4.6
+
+Yeni:
+blackboxai/anthropic/claude-sonnet-4.6
+
+2. Gemini 3.1 Pro Preview
+Eski:
+gemini-3.1-pro-preview
+
+Yeni:
+blackboxai/google/gemini-3.1-pro-preview
+
+3. MiniMax M2.1
+Eski:
+minimax-m2.1
+
+Yeni:
+blackboxai/minimax/minimax-m2.1
+
+Ne Degisti
+1. config/settings.py
+- Model routing Blackbox'in kabul ettigi tam id formatina gecirildi.
+- Beyin katmani:
+  blackboxai/google/gemini-3.1-pro-preview
+- Uretim ve arac katmani:
+  blackboxai/minimax/minimax-m2.1
+
+2. main.py
+- API key kontroli BLACKBOX_API_KEY olacak sekilde duzeltildi.
+
+3. ui/cli.py
+- Banner metni "Powered by Blackbox + Groq" olarak guncellendi.
+
+Nasil Dogrulandi
+1. Blackbox model listesi su komutla cekildi:
+Invoke-RestMethod `
+  -Uri "https://api.blackbox.ai/v1/models" `
+  -Headers @{ Authorization = "Bearer <BLACKBOX_API_KEY>" }
+
+2. Ilgili modeller filtrelenerek key'in gercekten hangi id'leri gordugu tespit edildi.
+
+3. Sonrasinda su test kosuldu:
+python main.py --no-key-check "basit bir hesap makinesi yaz"
+
+Test Sonucu
+- Planner calisti
+- Plan generated: 3 tasks
+- coder_fast ile kod ve test dosyasi olustu
+- executor tarafinda pytest basariyla calisti
+- Tum gorevler tamamlandi
+- Docs agent README olusturdu
+
+Ozet
+Degisiklik sadece "model secimi" degil, Blackbox tarafinda model adinin tam ve
+key'e ozel kabul edilen formatina gecis isiydi.

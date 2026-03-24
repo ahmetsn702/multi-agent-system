@@ -1,0 +1,330 @@
+BLACKBOX GECISINDEN ITIBAREN KRONOLOJIK RAPOR
+Olusturma kapsami: Kullanici "OpenRouter yerine Blackbox AI kullan" talimatindan bu mesaja kadar olan istekler, yapilan degisiklikler ve testler.
+Konum: multi_agent_system/blackbox_full_timeline_report.txt
+
+======================================================================
+1. ILK BLACKBOX GECISI
+======================================================================
+Kullanici istegi:
+- core/llm_client.py icinde OpenRouter yerine Blackbox AI kullanilsin.
+- Base URL Blackbox olsun.
+- API key BLACKBOX_API_KEY env'den okunsun.
+- .env.example icine BLACKBOX_API_KEY eklensin.
+- config/settings.py icindeki provider "blackbox" olsun.
+- Eski OpenRouter satirlari yorum olarak kalsin.
+
+Yapilanlar:
+- core/llm_client.py Blackbox tabanli hale getirildi.
+- config/settings.py icine blackbox provider config eklendi.
+- .env.example icine BLACKBOX_API_KEY satiri eklendi.
+- OpenRouter referanslari yorum olarak birakildi.
+
+Etkilenen dosyalar:
+- multi_agent_system/core/llm_client.py
+- multi_agent_system/config/settings.py
+- multi_agent_system/.env.example
+
+Not:
+- Bu asamada Blackbox URL ilk denemede yanlis girildi.
+
+======================================================================
+2. BLACKBOX URL DUZELTMESI
+======================================================================
+Kullanici istegi:
+- Yanlis URL: https://api.blackbox.ai/api/chat
+- Dogru URL:  https://api.blackbox.ai/chat/completions
+
+Yapilanlar:
+- llm_client.py ve settings.py icindeki Blackbox URL dogru endpoint'e cekildi.
+
+Etkilenen dosyalar:
+- multi_agent_system/core/llm_client.py
+- multi_agent_system/config/settings.py
+
+======================================================================
+3. API KEY DAVRANISI VE KULLANICI SORULARI
+======================================================================
+Kullanici sorulari / yapilanlar:
+- Kullanici "yeniden api girmem gerekir mi" diye sordu.
+- Aciklama verildi: artik OPENROUTER_API_KEY degil BLACKBOX_API_KEY okunuyor.
+- Kullanici Blackbox bakiyesinden mi harcandigini sordu.
+- Aciklama verildi: istekler Blackbox endpoint'e gittigi icin kullanim Blackbox tarafindan faturalaniyor.
+- Kullanici Minimax planini ve Blackbox PRO ekranini sordu.
+- Aciklama verildi: ekran uygulama/plana dair olabilir; API ve web kullanimi ayni olmayabilir.
+
+Onemli tespit:
+- Bu asamada sistem Blackbox'a gidiyordu ama bircok model adi Blackbox key'i tarafindan kabul edilmiyordu.
+
+======================================================================
+4. ILK BLACKBOX CALISTIRMA DENEMESI VE HATALAR
+======================================================================
+Kullanici aksiyonu:
+- python main.py ile "basit bir hesap makinesi yaz" testi calistirildi.
+
+Gorulen kritik hatalar:
+- Invalid model name passed in model=gemini-3.1-flash-lite-preview
+- Invalid model name passed in model=gpt-4o-mini
+
+Analiz:
+- Problem kredi degil, provider-model uyumsuzluguydu.
+- OpenRouter tarzi model adlari Blackbox'ta dogrudan gecmiyordu.
+
+======================================================================
+5. AJAN ENVANTERI VE ROLLER
+======================================================================
+Kullanici istegi:
+- Projedeki ajanlari ve rollerini roadmap icin yaz.
+
+Verilen ozet:
+- planner
+- researcher
+- coder
+- coder_fast
+- critic
+- security
+- optimizer
+- executor
+- builder
+- docs
+- yardimci: tester, linter, ui_tester
+- opsiyonel/pasif: profiler, analyzer
+
+Bu adim kod degisikligi degil, dokumantasyon/yonlendirme niteligindeydi.
+
+======================================================================
+6. MINIMAX / BLACKBOX MODEL TARTISMASI
+======================================================================
+Kullanici sorulari:
+- Minimax kullanilabilir mi
+- Tam model adi ne
+
+Verilen bilgi:
+- Projede o an gorunen model adi: minimax/minimax-m2.5
+- Sonraki asamada kullanici "degistirdin mi" diye sordu.
+- Cevap: hayir, sadece model adi yazildi; proje ayari degistirilmedi.
+
+======================================================================
+7. ILK KATEGORIK ROUTING DENEMESI
+======================================================================
+Kullanici onerisi:
+- BEYIN: planner, critic, security, optimizer -> Claude Sonnet 4.6
+- KAS: coder, coder_fast, researcher, docs -> MiniMax
+- ARAC: executor, tester, linter, builder -> MiniMax
+- ANALIZ: ui_tester, profiler, analyzer -> MiniMax
+
+Yapilanlar:
+- config/settings.py icinde bu siniflama esas alinarak model routing guncellendi.
+
+Sonuc:
+- Kullanici test etti.
+- planner icin Invalid model name passed in model=claude-sonnet-4.6 hatasi alindi.
+
+Analiz:
+- Docs sayfasindaki kisa model adi, kullanicinin key'i ile cagrilan gercek model id ile uyusmuyordu.
+
+======================================================================
+8. BLACKBOX MODEL LISTESI TESPITI
+======================================================================
+Kullanici aksiyonu:
+- PowerShell ile Blackbox /v1/models sorgulandi.
+- Ilk denemede curl alias / Headers hatasi yasandi.
+- Sonra Invoke-RestMethod ile basarili model listesi alindi.
+
+Kullanici tarafindan gorulen kritik model id'ler:
+- claude-haiku-4-5-20251001
+- claude-sonnet-4-5-20250514
+- blackboxai/minimax/minimax-m2.1
+- blackboxai/minimax/minimax-m2.5
+- blackboxai/google/gemini-3.1-pro-preview
+- blackboxai/anthropic/claude-sonnet-4.6
+- blackboxai/qwen/qwen3-30b-a3b
+
+Kritik tespit:
+- Blackbox bu key icin tam model id formatinda calisiyor:
+  blackboxai/<saglayici>/<model>
+
+======================================================================
+9. GERCEK BLACKBOX MODEL ID FORMATINA GECIS
+======================================================================
+Kullanici istegi:
+- Docs veya tahmin yerine gercek Blackbox model id formatini kullan.
+
+Yapilanlar:
+- config/settings.py icinde model id'ler Blackbox /v1/models formatina cevrildi.
+- main.py icindeki API key kontrolu BLACKBOX_API_KEY uzerine dogrulandi.
+- ui/cli.py banner'i "Powered by Blackbox + Groq" olarak guncellendi.
+
+Uygulanan ornek formatlar:
+- gemini-3.1-pro-preview
+  -> blackboxai/google/gemini-3.1-pro-preview
+- minimax-m2.1
+  -> blackboxai/minimax/minimax-m2.1
+- claude-sonnet-4.6
+  -> blackboxai/anthropic/claude-sonnet-4.6
+
+Etkilenen dosyalar:
+- multi_agent_system/config/settings.py
+- multi_agent_system/main.py
+- multi_agent_system/ui/cli.py
+
+Rapor:
+- Ayri bir ozet olarak blackbox_model_id_report.txt olusturuldu.
+
+======================================================================
+10. ILK BASARILI BLACKBOX UCANCA TEST
+======================================================================
+Kullanici / sistem aksiyonu:
+- Basit hesap makinesi gorevi tekrar denendi.
+
+Sonuc:
+- Blackbox uzerinden planner, coder, critic, executor ve docs zinciri calisti.
+- Sistem uc noktadan uc noktaya tamamlandi.
+
+Onem:
+- Bu asamada artik temel Blackbox entegrasyonunun calistigi dogrulandi.
+
+======================================================================
+11. GERCEKCI TEST - GOREV TAKIP API'SI
+======================================================================
+Kullanici aksiyonu:
+- FastAPI + SQLite gorev takip API'si testi yapildi.
+
+Gorulen durum:
+- Planner calisti.
+- Coder ve coder_fast bazi dosyalari uretti.
+- Testler bir noktada gecti.
+- Docs agent README olusturdu.
+
+Ama tespit edilen sorunlar:
+- Bos JSON / anlamsiz cikti donen coder_fast denemeleri oldu.
+- dosya_adi.py gibi cop dosyalar olustu.
+- Final ozet gercekte basarisiz olan kisimlari bazen basarili gibi anlatti.
+- Basari kriteri gercek durumdan kopuktu.
+
+Analiz:
+- Blackbox calisiyordu.
+- Asil problem orchestrator ve coder cikti dogrulama kalitesindeydi.
+
+======================================================================
+12. DAHA SERT TEST - E-TICARET BACKEND'I
+======================================================================
+Kullanici aksiyonu:
+- FastAPI + SQLite production'a yakin e-ticaret backend testi calistirildi.
+
+Gorulen sorunlar:
+- tests/test_app.py icin birden fazla yerde 0 test gecti, 3 hata goruldu.
+- crud.py syntax hatasi nedeniyle kaydedilemedi.
+- models_check.py ve workspace_check.py gibi gecici kontrol scriptleri proje dosyasi gibi yazildi.
+- orchestrator pip install database denedi; bu yerel modulu paket sandigini gosterdi.
+- Final ozet, gercekte var olmayan veya kaydedilmeyen dosyalari yazmis gibi davrandi.
+
+Kritik sonuc:
+- Sistem "proje tamamlandi" dese de gercekte kalite kapilari dogru calismiyordu.
+
+======================================================================
+13. KALITE SORUNLARININ TESPITI
+======================================================================
+Bu noktada tespit edilen cekirdek problemler:
+- Basarisiz task varken genel basari verilmesi
+- Coder / coder_fast'in check scriptlerini gercek kaynak dosya gibi yazmasi
+- Yerel modullerin pip paketi gibi algilanmasi
+- Final summary'nin halusinasyon yapmasi
+
+Onayli sonraki teknik yon:
+- Orchestrator basari kriterlerini sertlestirmek
+- Coder placeholder / check dosyalarini engellemek
+- Final summary'yi sadece gercek sonuc uzerinden yazmak
+
+Not:
+- Bu asamada kullanici bu patch'leri hemen yaptirmadi; once daha fazla test yapmak istedi.
+
+======================================================================
+14. TUM AGENTLARI SONNET 4.6'YA CEKME ISTEGI
+======================================================================
+Kullanici istegi:
+- Tum agentlari Sonnet 4.6 yap.
+
+Yapilanlar:
+- config/settings.py icinde tum agent routing'i tek modele cekildi:
+  blackboxai/anthropic/claude-sonnet-4.6
+- Bu model icin timeout eklendi.
+- Bu model icin token budget eklendi.
+- Bu model icin pricing kaydi eklendi.
+
+Etkilenen dosya:
+- multi_agent_system/config/settings.py
+
+======================================================================
+15. EN SERT TEST - MINI ERP BACKEND'I
+======================================================================
+Kullanici aksiyonu:
+- FastAPI + SQLite mini ERP backend testi calistirildi.
+- Bu testte tum agentlar Sonnet 4.6 kullaniyordu.
+
+Logtaki kritik sonuc:
+- Planner birden fazla kez cevap verdi.
+- Ancak run hemen su hata ile bitti:
+  No tasks generated from plan
+
+Detayli analiz:
+- Planner cevap dondugu icin model erisimi problemi yoktu.
+- Loglarda planner output sürekli 2000 token limitine vurdu.
+- Bu, planner cevabinin buyuk ihtimalle kesildigini gosterdi.
+- base_agent._parse_json_response parse fail durumunda None yerine {"raw": text} donduruyor.
+- planner_agent bunu dict oldugu icin "parse basarili" sanıyor.
+- Sonra mode/tasks/phases bos kaldigi icin orchestrator flat mode'da tasks=[] gorup
+  "No tasks generated from plan" hatasina dusuyor.
+
+Kritik teknik tespit:
+- Sorun Sonnet 4.6'nin baglanamamasi degil.
+- Sorun planner parse-fail durumunun yanlis siniflanmasi ve output kesilmesi.
+
+Ileriye donuk oneri:
+- _parse_json_response parse fail'de None dondurmeli
+- Planner bos tasks/phases planini retry etmeli
+- Planner icin output budget buyutulmeli
+- Planner think/act icinde iki kez ayni LLM cagrisi yapmamali
+
+======================================================================
+16. KULLANICININ YAPTIGI OZEL AKSIYONLAR OZETI
+======================================================================
+Kullanici tarafinda gerceklesen onemli denemeler:
+- python main.py ile birden fazla kez interaktif test kosuldu
+- basit hesap makinesi testi
+- gorev takip API'si testi
+- e-ticaret backend testi
+- mini ERP backend testi
+- PowerShell ile Blackbox /v1/models cagrisi yapildi
+- Blackbox model id listesi elle dogrulandi
+- Blackbox PRO / Minimax / API billing davranisi sorgulandi
+
+======================================================================
+17. DOSYA BAZLI OYKUNME OZETI
+======================================================================
+Blackbox gecisinden sonra degisen ana dosyalar:
+- multi_agent_system/core/llm_client.py
+- multi_agent_system/config/settings.py
+- multi_agent_system/.env.example
+- multi_agent_system/main.py
+- multi_agent_system/ui/cli.py
+- multi_agent_system/blackbox_model_id_report.txt
+
+Bu raporun dosyasi:
+- multi_agent_system/blackbox_full_timeline_report.txt
+
+======================================================================
+18. SU ANKI DURUM
+======================================================================
+Calisan kisimlar:
+- Blackbox endpoint entegrasyonu
+- BLACKBOX_API_KEY ile baglanti
+- Gercek Blackbox model id formatinin kullanimi
+- Tum agentlari Sonnet 4.6'ya route etme
+
+Hala sorunlu kisimlar:
+- Planner parse / retry mantigi
+- Coder/coder_fast cikti dogrulama
+- Orchestrator basari/failure karari
+- Dependency autodetect ve final summary guvenilirligi
+
+Rapor sonu.
