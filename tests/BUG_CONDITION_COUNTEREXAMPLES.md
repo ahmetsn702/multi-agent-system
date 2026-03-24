@@ -21,7 +21,7 @@
 **Evidence**:
 ```
 AssertionError: Bug detected: src/main.py does NOT exist at 
-C:\Users\ahmed\AppData\Local\Temp\test_workspace_fdy6wgaf\workspace\projects\
+$TEMP\test_workspace_fdy6wgaf\workspace\projects\
 create-a-fastapi-todo-app-with-crud-endp\src\main.py. 
 API project was created but main.py was not generated. 
 This confirms the missing main.py bug exists.
@@ -43,7 +43,7 @@ This confirms the missing main.py bug exists.
 **Evidence**:
 ```
 Logged output:
-[Tester] Test klasörü bulundu: C:\Users\ahmed\AppData\Local\Temp\test_pytest_j1ncvems\workspace\projects\test-project\tests
+[Tester] Test klasörü bulundu: $TEMP\test_pytest_j1ncvems\workspace\projects\test-project\tests
 [Tester] 0 test gecti, 3 hata
 [Tester]   =================================== ERRORS ====================================
 [Tester]   _________________ ERROR collecting tests/test_import_error.py _________________
