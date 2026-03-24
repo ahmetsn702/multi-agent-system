@@ -39,7 +39,7 @@ Write-Host ""
 Write-Host "  🌐 Erişim Adresleri:" -ForegroundColor White
 Write-Host "     PC         → http://localhost:$PORT" -ForegroundColor Green
 Write-Host "     Android    → http://$ip:$PORT" -ForegroundColor Green
-Write-Host "     Şifre      → ahmed2026" -ForegroundColor DarkGray
+Write-Host "     Şifre      → (check .env file)" -ForegroundColor DarkGray
 Write-Host ""
 
 # ── Port çakışma kontrolü ─────────────────────────────────────────────────

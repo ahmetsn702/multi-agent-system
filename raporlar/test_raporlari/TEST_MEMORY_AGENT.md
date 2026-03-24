@@ -10,7 +10,7 @@
 
 ### 1. Web Arayüzü Testi
 - URL: http://localhost:8001
-- Login: ahmed2026
+- Login: ***REDACTED*** (check .env)
 - Sol panelde "💾 Proje Hafızası" butonuna tıkla
 - Beklenen: "Henüz kayıtlı proje yok" mesajı
 
@@ -48,7 +48,7 @@ Beklenen Davranış:
 ## Önemli Notlar
 
 - Port 8000 kullanımda olduğu için 8001 kullanıyoruz
-- Login şifresi: ahmed2026
+- Login şifresi: ***REDACTED*** (check .env)
 - Memory DB: workspace/memory/project_memory.json
 - Tüm memory işlemleri try/except ile korunmuş
 

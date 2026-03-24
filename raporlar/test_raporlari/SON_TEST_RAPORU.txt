@@ -129,7 +129,7 @@ Not: Flask TODO API kaydedilmedi çünkü 5/6 görev (tam tamamlanmadı)
 ───────────────────────────────────────────────────────────────────────────────
 
 URL: http://localhost:8001
-Login: ahmed2026
+Login: ***REDACTED*** (check .env)
 
 Test Edilmesi Gerekenler:
   1. ⏳ Memory panel'i aç (sol panelde "💾 Proje Hafızası")

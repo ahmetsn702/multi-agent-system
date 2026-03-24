@@ -185,7 +185,7 @@ KULLANIM
    http://localhost:8000
    
    Şifre:
-   ahmed2026
+   ***REDACTED*** (set in .env)
    
    Kullanım:
    1. Hedef yaz: "Flask ile kullanıcı giriş sistemi yaz"
@@ -315,10 +315,10 @@ AWS_SECRET_ACCESS_KEY=...
 AWS_REGION=us-east-1
 
 # Telegram Bot
-TELEGRAM_BOT_TOKEN=8655634256:AAFSxSneurYn6I1t5Db0aY1DET59KiC-7e0
+TELEGRAM_BOT_TOKEN=***REDACTED***
 
 # Web Arayüzü
-WEB_PASSWORD=ahmed2026
+WEB_PASSWORD=***REDACTED***
 
 # Cluster Mode
 CLUSTER_MODE=true

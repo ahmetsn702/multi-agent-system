@@ -118,7 +118,7 @@ Not: Orchestrator'dan çalışan projeler henüz kaydedilmedi çünkü:
 ───────────────────────────────────────────────────────────────────────────────
 
 URL: http://localhost:8001
-Login: ahmed2026
+Login: ***REDACTED*** (check .env)
 
 Test Adımları:
   1. ✅ Login sayfası çalışıyor
