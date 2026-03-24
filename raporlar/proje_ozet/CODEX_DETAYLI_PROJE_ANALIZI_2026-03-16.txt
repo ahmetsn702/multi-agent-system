@@ -1,7 +1,7 @@
 CODEX DETAYLI PROJE ANALIZI
 Tarih: 2026-03-16
 Proje: Multi-Agent / Multi-Agent Orchestration System
-Calisma dizini: C:\Users\ahmed\OneDrive\Masaustu\Multi-Agent
+Calisma dizini: ./Multi-Agent
 Rapor tipi: Kod merkezli mimari ve operasyonel inceleme
 Hazirlayan: Codex
 Dil: Turkce

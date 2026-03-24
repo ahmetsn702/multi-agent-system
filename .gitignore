@@ -74,6 +74,9 @@ node_modules/
 *.md.bak
 test_output.log
 
+# Promptlar (hassas/kisisel prompt dosyalari)
+promptlar/
+
 # Rapor / dokumantasyon dosyalari (proje kodu degil)
 PROJE_DOKUMANTASYONU.txt
 PROJE_OZETI.txt
