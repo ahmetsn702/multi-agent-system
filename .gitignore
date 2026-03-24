@@ -2,6 +2,9 @@
 .claude/
 .hypothesis/
 
+# Legacy duplicate codebase (orphaned submodule)
+multi_agent_system/
+
 # Executables and installers
 *.exe
 *.msi
