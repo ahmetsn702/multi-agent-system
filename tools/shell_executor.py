@@ -3,7 +3,10 @@ tools/shell_executor.py
 Safely execute shell commands (read-only / safe list by default).
 """
 import asyncio
+import logging
 import os
+import shlex
+import subprocess
 import time
 from typing import Optional
 
@@ -20,11 +23,44 @@ BLOCKED_PATTERNS = (
     "shutdown", "reboot", ":(){", "fork bomb",
 )
 
+logger = logging.getLogger(__name__)
+
 
 def _is_safe(command: str) -> bool:
-    lower = command.lower().strip()
+    command = (command or "").strip()
+    if not command:
+        logger.warning("Blocked command (empty command).")
+        return False
+
+    try:
+        tokens = shlex.split(command, posix=(os.name != "nt"))
+    except ValueError:
+        logger.warning(f"Blocked command (parse error): {command[:80]}")
+        return False
+
+    if not tokens:
+        logger.warning("Blocked command (no executable token).")
+        return False
+
+    executable = os.path.basename(tokens[0]).lower()
+    if executable.endswith(".exe"):
+        executable = executable[:-4]
+
+    if executable not in ALLOWED_PREFIXES:
+        logger.warning(f"Blocked command (not in allowlist): {command[:80]}")
+        return False
+
+    # shell=False mode intentionally blocks shell chaining/pipe semantics by default.
+    # If pipe/redirection support is required, implement a dedicated audited wrapper
+    # for tightly-scoped command templates rather than enabling shell=True globally.
+    if any(meta in command for meta in ("|", "&&", "||", ";", ">", "<")):
+        logger.warning(f"Blocked command (shell metacharacter): {command[:80]}")
+        return False
+
+    lower = command.lower()
     for blocked in BLOCKED_PATTERNS:
         if blocked in lower:
+            logger.warning(f"Blocked command (pattern match): {command[:80]}")
             return False
     return True
 
@@ -52,30 +88,20 @@ async def run_shell(
     start = time.monotonic()
 
     try:
-        proc = await asyncio.create_subprocess_shell(
-            command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+        cmd_list = shlex.split(command, posix=(os.name != "nt"))
+        proc = await asyncio.to_thread(
+            subprocess.run,
+            cmd_list,
+            shell=False,
+            capture_output=True,
+            text=True,
             cwd=working_dir,
+            timeout=timeout,
         )
-        try:
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                proc.communicate(), timeout=timeout
-            )
-        except asyncio.TimeoutError:
-            proc.kill()
-            await proc.communicate()
-            elapsed = (time.monotonic() - start) * 1000
-            return ToolResult(
-                success=False,
-                data=None,
-                error=f"Command timed out after {timeout}s",
-                execution_time_ms=elapsed,
-            )
 
         elapsed = (time.monotonic() - start) * 1000
-        stdout = stdout_bytes.decode(errors="replace")
-        stderr = stderr_bytes.decode(errors="replace")
+        stdout = proc.stdout
+        stderr = proc.stderr
         return_code = proc.returncode
 
         return ToolResult(
@@ -87,6 +113,14 @@ async def run_shell(
                 "command": command,
             },
             error=stderr if return_code != 0 else None,
+            execution_time_ms=elapsed,
+        )
+    except subprocess.TimeoutExpired:
+        elapsed = (time.monotonic() - start) * 1000
+        return ToolResult(
+            success=False,
+            data=None,
+            error=f"Command timed out after {timeout}s",
             execution_time_ms=elapsed,
         )
     except Exception as e:

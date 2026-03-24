@@ -217,6 +217,9 @@ class LLMClient:
             response.raise_for_status()
             response_body = response.json()
 
+        print(f"[DEBUG] response_body type: {type(response_body)}, keys: {list(response_body.keys()) if isinstance(response_body, dict) else 'N/A'}")
+        print(f"[DEBUG] choices: {response_body.get('choices', 'N/A')}")
+
         usage = response_body.get("usage", {})
         in_tok = usage.get("prompt_tokens", 0)
         out_tok = usage.get("completion_tokens", 0)
@@ -228,7 +231,10 @@ class LLMClient:
         token_tracker.record(self.agent_id, in_tok, out_tok, cost)
         print(f"[COST] {self.agent_id} | {self.model_id} | in:{in_tok} out:{out_tok} | ${cost:.6f}")
 
-        return response_body["choices"][0]["message"]["content"]
+        result_text = response_body["choices"][0]["message"]["content"]
+        print(f"[DEBUG] _extract_text result: {repr(result_text[:200]) if result_text else None}")
+        
+        return result_text
 
     async def _stream_complete(self, payload: dict) -> str:
         full_text = ""

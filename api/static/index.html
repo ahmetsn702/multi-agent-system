@@ -18,6 +18,7 @@
       --green: #10b981;
       --red: #ef4444;
       --yellow: #f59e0b;
+      --purple: #a855f7;
       --text: #e2e8f0;
       --muted: #64748b;
       --border: #2d2d4e;
@@ -301,6 +302,60 @@
       color: var(--yellow);
     }
 
+    .log-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .clear-btn {
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      font-size: 11px;
+      border-radius: 8px;
+      padding: 4px 8px;
+      cursor: pointer;
+    }
+
+    .clear-btn:active {
+      opacity: .8;
+    }
+
+    .agent-log-body {
+      max-height: 300px;
+      overflow-y: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      color: #cbd5e1;
+    }
+
+    .agent-line {
+      margin-bottom: 3px;
+      word-break: break-word;
+    }
+
+    .agent-planner {
+      color: #60a5fa;
+    }
+
+    .agent-coder {
+      color: #10b981;
+    }
+
+    .agent-critic {
+      color: #f59e0b;
+    }
+
+    .agent-executor {
+      color: #ef4444;
+    }
+
+    .agent-researcher {
+      color: var(--purple);
+    }
+
     /* ── Result card ── */
     .result-card {
       background: var(--surface2);
@@ -410,6 +465,60 @@
       font-family: monospace;
     }
 
+    .question-item {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+
+    .question-title {
+      font-size: 13px;
+      color: var(--text);
+      margin-bottom: 10px;
+      line-height: 1.5;
+    }
+
+    .question-input {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+    }
+
+    .question-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .option-btn {
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      font-size: 12px;
+      border-radius: 20px;
+      padding: 6px 12px;
+      cursor: pointer;
+    }
+
+    .option-btn.selected {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .question-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 8px;
+    }
+
     /* ── Sessions ── */
     .session-row {
       display: flex;
@@ -440,6 +549,11 @@
 
     .session-status.error {
       background: var(--red);
+    }
+
+    .session-status.paused {
+      background: var(--accent2);
+      animation: pulse 1s infinite;
     }
 
     .session-goal {
@@ -504,6 +618,16 @@
       <div class="log-body" id="logBody"></div>
     </div>
 
+    <div class="log-panel" id="agentLogPanel" style="display:none">
+      <div class="log-header">
+        <span>🤖 AGENT LIVE PANEL</span>
+        <div class="log-actions">
+          <button class="clear-btn" onclick="clearAgentLogs()">Temizle</button>
+        </div>
+      </div>
+      <div class="log-body agent-log-body" id="agentLogBody"></div>
+    </div>
+
     <div class="result-card" id="resultCard">
       <h3>✅ SONUÇ</h3>
       <p id="resultText"></p>
@@ -534,8 +658,27 @@
     </div>
   </div>
 
+  <!-- Clarification modal -->
+  <div class="overlay" id="questionsOverlay">
+    <div class="modal" onclick="event.stopPropagation()">
+      <button class="modal-close" onclick="closeQuestionsModal()">✕ Kapat</button>
+      <h3 style="font-size:15px;margin-bottom:10px;color:var(--accent2)">Plan için kısa netleştirme</h3>
+      <div id="questionsContainer"></div>
+      <div class="question-actions">
+        <button class="run-btn" id="questionsContinueBtn" onclick="submitQuestionAnswers()"
+          style="width:auto;padding:10px 16px;font-size:14px">Devam Et</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const BASE = window.location.origin;
+    let agentLogSource = null;
+    let liveTokenTotal = 0;
+    let questionPollTimer = null;
+    let activeQuestionSession = null;
+    let activeQuestions = [];
+    let questionAnswers = {};
 
     // ── Tab switching ──────────────────────────────
     function switchTab(name) {
@@ -559,12 +702,21 @@
       const goal = document.getElementById('goalInput').value.trim();
       if (!goal) { alert('Lütfen bir hedef gir!'); return; }
 
+      activeQuestions = [];
+      activeQuestionSession = null;
+      closeQuestionsModal();
+      stopQuestionPolling();
+
       const btn = document.getElementById('runBtn');
       btn.disabled = true;
       btn.textContent = '⏳ Çalışıyor...';
 
       document.getElementById('logPanel').style.display = 'block';
+      document.getElementById('agentLogPanel').style.display = 'block';
       document.getElementById('logBody').innerHTML = '';
+      document.getElementById('agentLogBody').innerHTML = '';
+      liveTokenTotal = 0;
+      connectAgentLogStream();
       document.getElementById('resultCard').classList.remove('show');
       document.getElementById('spinner').classList.add('active');
       document.getElementById('logStatus').textContent = 'Bağlanıyor...';
@@ -576,7 +728,9 @@
           body: JSON.stringify({ goal })
         });
         const { session_id } = await res.json();
+        activeQuestionSession = session_id;
         appendLog(`🚀 Oturum başladı: ${session_id}`, 'info');
+        startQuestionPolling(session_id);
         streamLogs(session_id);
       } catch (e) {
         appendLog('❌ Sunucuya bağlanılamadı: ' + e.message, 'err');
@@ -594,21 +748,37 @@
           const cls = data.log.includes('[COST]') ? 'cost'
             : data.log.includes('✅') || data.log.includes('completed') ? 'ok'
               : data.log.includes('❌') || data.log.includes('error') ? 'err'
-                : data.log.match(/🧠|📦|⚙️|🚀|🔍/) ? 'info' : '';
+                : data.log.match(/🧠|📦|⚙️|🚀|🔍|⏸️|▶️/) ? 'info' : '';
           appendLog(data.log, cls);
         }
         if (data.status) {
           es.close();
+          stopQuestionPolling();
+          activeQuestions = [];
+          activeQuestionSession = null;
+          closeQuestionsModal();
+
           if (data.status === 'done') {
             document.getElementById('resultCard').classList.add('show');
             document.getElementById('resultText').textContent = data.result || 'Tamamlandı.';
             document.getElementById('logStatus').textContent = 'Tamamlandı ✓';
             document.getElementById('spinner').classList.remove('active');
             appendLog('🏁 Tamamlandı!', 'ok');
+            appendAgentLogLine({
+              agent: 'system',
+              stage: 'done',
+              message: `✅ Görev tamamlandı — toplam ${liveTokenTotal} token`,
+              tokens: 0,
+              timestamp: new Date().toISOString()
+            });
           } else {
             appendLog('❌ Hata: ' + data.result, 'err');
             document.getElementById('logStatus').textContent = 'Hata';
             document.getElementById('spinner').classList.remove('active');
+          }
+          if (agentLogSource) {
+            agentLogSource.close();
+            agentLogSource = null;
           }
           resetBtn();
           loadSessions();
@@ -618,6 +788,189 @@
         appendLog('⚠️ SSE bağlantısı kesildi, yeniden deneniyor...', 'err');
         es.close();
       };
+    }
+
+    function startQuestionPolling(sessionId) {
+      stopQuestionPolling();
+      let isPolling = false;
+
+      const poll = async () => {
+        if (isPolling) return;
+        isPolling = true;
+        try {
+          const res = await fetch(`${BASE}/session/${sessionId}/questions`);
+          if (!res.ok) return;
+          const data = await res.json();
+          if (Array.isArray(data.questions) && data.questions.length > 0) {
+            document.getElementById('logStatus').textContent = 'Kullanıcı cevabı bekleniyor...';
+            document.getElementById('spinner').classList.remove('active');
+            openQuestionsModal(sessionId, data.questions, data.answers || {});
+            stopQuestionPolling();
+          } else if (data.status === 'done' || data.status === 'error') {
+            stopQuestionPolling();
+          }
+        } catch (_) {
+          // no-op
+        } finally {
+          isPolling = false;
+        }
+      };
+
+      poll();
+      questionPollTimer = setInterval(poll, 700);
+    }
+
+    function stopQuestionPolling() {
+      if (questionPollTimer) {
+        clearInterval(questionPollTimer);
+        questionPollTimer = null;
+      }
+    }
+
+    function openQuestionsModal(sessionId, questions, existingAnswers = {}) {
+      activeQuestionSession = sessionId;
+      activeQuestions = questions;
+      questionAnswers = { ...existingAnswers };
+      renderQuestions();
+      document.getElementById('questionsOverlay').classList.add('show');
+    }
+
+    function closeQuestionsModal() {
+      document.getElementById('questionsOverlay').classList.remove('show');
+      if (activeQuestionSession && activeQuestions.length > 0) {
+        startQuestionPolling(activeQuestionSession);
+      }
+    }
+
+    function renderQuestions() {
+      const container = document.getElementById('questionsContainer');
+      container.innerHTML = '';
+
+      activeQuestions.forEach((q) => {
+        const card = document.createElement('div');
+        card.className = 'question-item';
+
+        const title = document.createElement('div');
+        title.className = 'question-title';
+        title.textContent = q.question || '';
+        card.appendChild(title);
+
+        if (Array.isArray(q.options) && q.options.length > 0) {
+          const optionsWrap = document.createElement('div');
+          optionsWrap.className = 'question-options';
+          q.options.forEach((opt) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'option-btn';
+            btn.textContent = opt;
+            if (questionAnswers[q.id] === opt) {
+              btn.classList.add('selected');
+            }
+            btn.addEventListener('click', () => {
+              questionAnswers[q.id] = opt;
+              renderQuestions();
+            });
+            optionsWrap.appendChild(btn);
+          });
+          card.appendChild(optionsWrap);
+        } else {
+          const input = document.createElement('input');
+          input.className = 'question-input';
+          input.type = 'text';
+          input.placeholder = 'Cevabınızı yazın...';
+          input.value = questionAnswers[q.id] || '';
+          input.addEventListener('input', (e) => {
+            questionAnswers[q.id] = e.target.value;
+          });
+          card.appendChild(input);
+        }
+
+        container.appendChild(card);
+      });
+    }
+
+    async function submitQuestionAnswers() {
+      if (!activeQuestionSession || !activeQuestions.length) return;
+
+      const missing = activeQuestions
+        .map(q => q.id)
+        .filter(id => !String(questionAnswers[id] || '').trim());
+
+      if (missing.length > 0) {
+        alert('Lütfen tüm soruları cevaplayın.');
+        return;
+      }
+
+      const btn = document.getElementById('questionsContinueBtn');
+      btn.disabled = true;
+      btn.textContent = 'Gönderiliyor...';
+
+      try {
+        const res = await fetch(`${BASE}/session/${activeQuestionSession}/answers`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(questionAnswers),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || 'Cevaplar gönderilemedi');
+        }
+
+        appendLog('📝 Netleştirme cevapları gönderildi, işlem devam ediyor.', 'info');
+        activeQuestions = [];
+        closeQuestionsModal();
+        document.getElementById('logStatus').textContent = 'Çalışıyor...';
+        document.getElementById('spinner').classList.add('active');
+      } catch (e) {
+        appendLog('❌ Cevap gönderme hatası: ' + e.message, 'err');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Devam Et';
+      }
+    }
+
+    function connectAgentLogStream() {
+      if (agentLogSource) {
+        agentLogSource.close();
+      }
+      agentLogSource = new EventSource(`${BASE}/logs/stream`);
+
+      agentLogSource.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          appendAgentLogLine(data);
+        } catch (_) { }
+      };
+
+      agentLogSource.onerror = () => {
+        if (agentLogSource) {
+          agentLogSource.close();
+          agentLogSource = null;
+        }
+      };
+    }
+
+    function appendAgentLogLine(data) {
+      const body = document.getElementById('agentLogBody');
+      const p = document.createElement('p');
+      const when = data.timestamp ? new Date(data.timestamp) : new Date();
+      const hhmmss = when.toTimeString().slice(0, 8);
+      const agent = (data.agent || 'unknown').toLowerCase();
+      const stage = data.stage || 'act';
+      const message = data.message || '';
+      const tokens = Number(data.tokens || 0);
+
+      liveTokenTotal += Math.max(0, tokens);
+      p.className = `agent-line agent-${agent}`;
+      p.textContent = `[${hhmmss}] 🤖 ${agent} → ${stage} — "${message}" (${tokens} token)`;
+      body.appendChild(p);
+      body.scrollTop = body.scrollHeight;
+    }
+
+    function clearAgentLogs() {
+      document.getElementById('agentLogBody').innerHTML = '';
+      liveTokenTotal = 0;
     }
 
     function appendLog(text, cls = '') {

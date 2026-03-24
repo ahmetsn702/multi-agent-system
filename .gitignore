@@ -1,4 +1,7 @@
-<<<<<<< HEAD
+# IDE / workspace temp files
+.claude/
+.hypothesis/
+
 # Executables and installers
 *.exe
 *.msi
@@ -17,90 +20,61 @@
 # PDFs
 *.pdf
 
-# Archives/zips
+# Archives / zips
 *.zip
 *.rar
 *.7z
 
-# Python cache
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-
-# Virtual environments
-venv/
-env/
-.venv/
-.env/
-
-# Environment variables / secrets
-.env
-*.env
-config_local.py
-
-# IDE / editor
-.vscode/settings.json
-*.resolved
-
-# Logs and temp
-*.log
-logs/
-tmp/
-temp/
-
-# OS generated
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# Node modules (if any frontend)
-node_modules/
-
-# Build outputs
-dist/
-build/
-*.egg-info/
-
-# Test outputs / screenshots in workspace (large)
-multi_agent_system/workspace/screenshots/
-multi_agent_system/workspace/sandbox/
-
-# Large data files
-*.sqlite
-*.db
-=======
 # Python
 __pycache__/
 *.py[cod]
 *.pyo
+*.pyd
+.Python
+*.egg
 *.egg-info/
 dist/
 build/
-*.egg
 
 # Environment
 .env
 .env.local
+.env/
+*.env
 .venv/
 venv/
+env/
+config_local.py
 
-# IDE
+# IDE / editor
 .vscode/
 .idea/
 *.swp
 *.swo
+*.resolved
+
+# Logs / temp
+*.log
+*.log.*
+logs/
+tmp/
+temp/
 
 # OS
 Thumbs.db
 .DS_Store
+desktop.ini
 
-# Test/Cache
+# Node modules
+node_modules/
+
+# Test / cache
 .pytest_cache/
 *.bak
+*.md.bak
+test_output.log
 
-# Rapor/Dokümantasyon dosyaları (proje kodu değil)
+# Rapor / dokumantasyon dosyalari (proje kodu degil)
 PROJE_DOKUMANTASYONU.txt
 PROJE_OZETI.txt
 PROJE_SON_DURUM.txt
@@ -110,20 +84,24 @@ V2_DEGISIKLIK_RAPORU.txt
 V3_DEGISIKLIK_RAPORU.txt
 user_profile.txt
 error_log.txt
-test_output.log
 
-# Workspace (üretilen projeler ve temp dosyalar)
+# Workspace (uretilen projeler ve temp dosyalar)
+.kiro/
 workspace/projects/
 workspace/*.py
 workspace/*.txt
 workspace/logs/
 workspace/web_scraper_project/
+multi_agent_system/workspace/screenshots/
+multi_agent_system/workspace/sandbox/
 
-# Memory/Cache/Logs
+# Memory / cache / logs
 memory/
 cache/
 messages.jsonl
 models.json
 test_onysoft.py
-test_output.log
->>>>>>> 3587aaa0cd7f47617cf2fcaf1085cfd818bfcc45
+
+# Large data files
+*.sqlite
+*.db

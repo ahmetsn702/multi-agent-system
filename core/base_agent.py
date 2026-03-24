@@ -6,11 +6,12 @@ Provides think/act/communicate/use_tool interface, memory, and status tracking.
 import asyncio
 import json
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Optional
 
-from core.llm_client import LLMClient
+from core.llm_client import LLMClient, token_tracker
 from core.memory import memory_manager
 from core.message_bus import Message, MessageBus, MessageType, Priority
 
@@ -113,6 +114,39 @@ class ToolResult:
         }
 
 
+@dataclass
+class LogEvent:
+    agent_name: str
+    stage: str
+    message: str
+    tokens_used: int
+    timestamp: str
+
+
+LOG_QUEUE: asyncio.Queue[LogEvent] = asyncio.Queue()
+
+
+def _agent_total_tokens(agent_name: str) -> int:
+    usage = token_tracker.get(agent_name)
+    return int(usage.get("total_tokens", 0))
+
+
+async def emit_log_event(
+    agent_name: str,
+    stage: str,
+    message: str,
+    tokens_used: int = 0,
+) -> None:
+    event = LogEvent(
+        agent_name=agent_name,
+        stage=stage,
+        message=message,
+        tokens_used=max(0, int(tokens_used)),
+        timestamp=datetime.now(timezone.utc).isoformat(),
+    )
+    await LOG_QUEUE.put(event)
+
+
 class BaseAgent(ABC):
     """
     Abstract base class for all agents in the multi-agent system.
@@ -128,6 +162,8 @@ class BaseAgent(ABC):
         capabilities: list[str],
         bus: Optional[MessageBus] = None,
     ):
+        import logging
+        
         self.agent_id = agent_id
         self.name = name
         self.role = role
@@ -139,6 +175,9 @@ class BaseAgent(ABC):
         self._bus = bus
         self._memory = memory_manager
         self._tools: dict[str, Any] = {}
+        
+        # Initialize logger
+        self.logger = logging.getLogger(f"{__name__}.{agent_id}")
 
         self.total_input_tokens = 0
         self.total_output_tokens = 0
@@ -183,17 +222,73 @@ class BaseAgent(ABC):
         This is the main entry point for assigning a task to an agent.
         """
         self.status = AgentStatus.THINKING
+        task_label = (task.description or "").strip()
+        if not task_label:
+            task_label = task.task_id
         self._memory.add_to_short_term(
             self.agent_id, "user", f"Task: {task.description}", {"task_id": task.task_id}
         )
 
         try:
+            think_before = _agent_total_tokens(self.agent_id)
+            await emit_log_event(
+                agent_name=self.agent_id,
+                stage="think",
+                message=f"Thinking: {task_label[:120]}",
+                tokens_used=0,
+            )
             thought = await self.think(task)
+
+            think_after = _agent_total_tokens(self.agent_id)
+            await emit_log_event(
+                agent_name=self.agent_id,
+                stage="think",
+                message="Thought complete.",
+                tokens_used=think_after - think_before,
+            )
+
             self.status = AgentStatus.ACTING
+
+            act_before = _agent_total_tokens(self.agent_id)
+            await emit_log_event(
+                agent_name=self.agent_id,
+                stage="act",
+                message=f"Acting on task: {task_label[:120]}",
+                tokens_used=0,
+            )
             response = await self.act(thought, task)
 
+            # Debug logging for response
+            if response.content is None:
+                print(f"[AGENT FAIL] {self.name} response content is None!")
+                print(f"  - success: {response.success}")
+                print(f"  - error: {response.error}")
+                print(f"  - metadata: {response.metadata}")
+
+            act_after = _agent_total_tokens(self.agent_id)
+            await emit_log_event(
+                agent_name=self.agent_id,
+                stage="act",
+                message="Action complete.",
+                tokens_used=act_after - act_before,
+            )
+
             # Self-reflection
+            reflect_before = _agent_total_tokens(self.agent_id)
+            await emit_log_event(
+                agent_name=self.agent_id,
+                stage="reflect",
+                message="Reflecting on response quality.",
+                tokens_used=0,
+            )
             reflection = await self._reflect(task, response)
+            reflect_after = _agent_total_tokens(self.agent_id)
+            await emit_log_event(
+                agent_name=self.agent_id,
+                stage="reflect",
+                message="Reflection complete.",
+                tokens_used=reflect_after - reflect_before,
+            )
             response.self_reflection = reflection
 
             self._memory.add_to_short_term(
@@ -208,6 +303,13 @@ class BaseAgent(ABC):
 
         except Exception as e:
             self.status = AgentStatus.ERROR
+            await emit_log_event(
+                agent_name=self.agent_id,
+                stage="act",
+                message=f"Error: {str(e)[:160]}",
+                tokens_used=0,
+            )
+            print(f"[AGENT FAIL] {self.name} exception: {repr(e)[:300]}")
             return AgentResponse(
                 content=None,
                 success=False,
@@ -308,7 +410,7 @@ class BaseAgent(ABC):
         return result
 
     def _parse_json_response(self, text: str) -> dict:
-        """Attempt to parse JSON from LLM response, stripping markdown fences."""
+        """Attempt to parse JSON from LLM response, stripping markdown fences and repairing common issues."""
         import re
         match = re.search(r'```(?:json)?\s*(.*?)\s*```', text, re.DOTALL)
         if match:
@@ -320,11 +422,70 @@ class BaseAgent(ABC):
                 json_str = text[start:end+1]
             else:
                 json_str = text
-                
+
+        # Try direct parse first
         try:
             return json.loads(json_str)
-        except Exception:
-            return {"raw": text}
+        except json.JSONDecodeError as e:
+            self.logger.debug(f"Initial JSON parse failed: {e}")
+            pass
+
+        # Try repairing common LLM JSON issues
+        repaired = self._repair_json_string(json_str)
+        if repaired:
+            try:
+                result = json.loads(repaired)
+                self.logger.debug("JSON repair successful")
+                return result
+            except json.JSONDecodeError:
+                pass
+
+        # Try json_repair library if available
+        try:
+            from json_repair import repair_json as jr
+            repaired_text = jr(json_str)
+            result = json.loads(repaired_text)
+            self.logger.debug("JSON repair library successful")
+            return result
+        except ImportError:
+            self.logger.debug("json_repair library not available")
+        except Exception as e:
+            self.logger.debug(f"json_repair library failed: {e}")
+
+        # Fallback to raw text
+        return {"raw": text}
+
+    def _repair_json_string(self, text: str) -> Optional[str]:
+        """
+        Repair common LLM JSON issues like unescaped newlines in string values.
+        
+        Args:
+            text: Potentially malformed JSON string
+            
+        Returns:
+            Repaired JSON string or None if repair fails
+        """
+        import re
+        
+        try:
+            # Strategy 1: Replace literal newlines inside string values with escaped newlines
+            # This regex finds strings and replaces unescaped newlines within them
+            def replace_newlines_in_strings(match):
+                string_content = match.group(0)
+                # Replace unescaped newlines with \n
+                return string_content.replace('\n', '\\n')
+            
+            # Find all string values (between quotes) and fix newlines
+            repaired = re.sub(r'"[^"]*"', replace_newlines_in_strings, text, flags=re.DOTALL)
+            
+            # Strategy 2: If that didn't work, try collapsing all newlines to spaces
+            if repaired == text:
+                repaired = re.sub(r'(?<!\\)\n', ' ', text)
+            
+            return repaired
+        except Exception as e:
+            self.logger.debug(f"JSON repair failed: {e}")
+            return None
 
     def get_status_dict(self) -> dict:
         """Return agent status as a dict (for UI display)."""

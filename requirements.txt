@@ -21,3 +21,5 @@ pytest-asyncio>=0.23.0
 
 # Utilities
 aiofiles>=23.2.1
+# JSON repair for malformed LLM responses
+json-repair>=0.58.0

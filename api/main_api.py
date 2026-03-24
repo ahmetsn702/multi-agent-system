@@ -9,11 +9,13 @@ import json
 import os
 import sys
 import uuid
+import secrets
 from datetime import datetime
 from pathlib import Path
 from typing import AsyncGenerator
+from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -29,12 +31,29 @@ os.chdir(ROOT)  # so workspace/ paths resolve correctly
 from dotenv import load_dotenv
 load_dotenv()
 
-app = FastAPI(title="Multi-Agent System API", version="1.0.0")
+from core.base_agent import LOG_QUEUE
+WEB_PASSWORD = os.getenv("WEB_PASSWORD")
 
-# Allow all origins (local network access from Android browser)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if not WEB_PASSWORD:
+        warning_msg = "⚠ WEB_PASSWORD not set — running in open mode (local dev)"
+        try:
+            print(warning_msg)
+        except UnicodeEncodeError:
+            print("WEB_PASSWORD not set -- running in open mode (local dev)")
+    yield
+
+
+app = FastAPI(title="Multi-Agent System API", version="1.0.0", lifespan=lifespan)
+
+# CORS origins from environment (comma-separated)
+ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -45,8 +64,10 @@ STATIC_DIR.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # ── Auth config ────────────────────────────────────────────────────────────
-WEB_PASSWORD = os.getenv("WEB_PASSWORD", "ahmed2026")
 SESSION_TOKEN = "mas_session"          # cookie name
+# NOTE: In-memory session store is acceptable for local/dev usage only.
+# In production, use a persistent/session backend (Redis/DB/etc.).
+SESSION_STORE: dict[str, dict] = {}
 # Public paths that don't need auth
 PUBLIC = {"/login", "/health", "/static"}
 
@@ -55,13 +76,15 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        if not WEB_PASSWORD:
+            return await call_next(request)
         path = request.url.path
         # Allow public paths
         if path == "/login" or path.startswith("/static") or path == "/health":
             return await call_next(request)
         # Check cookie
         token = request.cookies.get(SESSION_TOKEN)
-        if token != WEB_PASSWORD:
+        if not token or token not in SESSION_STORE:
             return RedirectResponse(url="/login", status_code=302)
         return await call_next(request)
 
@@ -100,23 +123,44 @@ button:active{opacity:.85}
   %ERROR%
 </div></body></html>"""
 
+def _issue_session_redirect(url: str = "/") -> RedirectResponse:
+    session_token = secrets.token_urlsafe(32)
+    SESSION_STORE[session_token] = {
+        "created_at": datetime.now().isoformat(),
+    }
+    response = RedirectResponse(url=url, status_code=302)
+    response.set_cookie(
+        SESSION_TOKEN,
+        session_token,
+        httponly=True,
+        samesite="lax",
+        max_age=86400 * 30,
+    )
+    return response
+
 @app.get("/login", response_class=HTMLResponse)
 async def login_page():
+    if not WEB_PASSWORD:
+        return _issue_session_redirect("/")
     return HTMLResponse(LOGIN_HTML.replace("%ERROR%", ""))
 
 @app.post("/login")
 async def login_submit(request: Request):
+    if not WEB_PASSWORD:
+        return _issue_session_redirect("/")
+
     form = await request.form()
     password = form.get("password", "")
     if password == WEB_PASSWORD:
-        response = RedirectResponse(url="/", status_code=302)
-        response.set_cookie(SESSION_TOKEN, WEB_PASSWORD, httponly=True, max_age=86400*30)
-        return response
+        return _issue_session_redirect("/")
     html = LOGIN_HTML.replace("%ERROR%", '<p class="err" style="display:block">❌ Yanlış şifre</p>')
     return HTMLResponse(html, status_code=401)
 
 @app.get("/logout")
-async def logout():
+async def logout(request: Request):
+    token = request.cookies.get(SESSION_TOKEN)
+    if token:
+        SESSION_STORE.pop(token, None)
     response = RedirectResponse(url="/login", status_code=302)
     response.delete_cookie(SESSION_TOKEN)
     return response
@@ -133,6 +177,27 @@ class GoalRequest(BaseModel):
 
 
 # ── Helper ─────────────────────────────────────────────────────────────────
+def _sync_session_with_orchestrator(session_id: str) -> dict | None:
+    sess = sessions.get(session_id)
+    if not sess:
+        return None
+
+    orch = sess.get("orchestrator")
+    if not orch:
+        return sess
+
+    try:
+        state = orch.get_state()
+        sess["questions"] = orch.get_pending_questions()
+        if state == "PAUSED":
+            sess["status"] = "paused"
+        elif sess.get("status") == "paused":
+            sess["status"] = "running"
+    except Exception:
+        pass
+    return sess
+
+
 def _build_agents():
     from core.message_bus import bus
     from agents.planner_agent import PlannerAgent
@@ -167,6 +232,9 @@ async def run_goal(req: GoalRequest):
         "goal": req.goal,
         "logs": [],
         "result": None,
+        "questions": [],
+        "answers": {},
+        "orchestrator": None,
         "started_at": datetime.now().isoformat(),
     }
 
@@ -179,15 +247,64 @@ async def run_goal(req: GoalRequest):
         try:
             agents = _build_agents()
             orch = Orchestrator(agents=agents, status_callback=status_cb)
+            sessions[session_id]["orchestrator"] = orch
             result = await orch.run(req.goal)
             sessions[session_id]["status"] = "done"
             sessions[session_id]["result"] = result.get("output", "")
         except Exception as e:
             sessions[session_id]["status"] = "error"
             sessions[session_id]["result"] = str(e)
+        finally:
+            if session_id in sessions:
+                sessions[session_id]["orchestrator"] = None
 
     asyncio.create_task(_background())
     return {"session_id": session_id}
+
+
+@app.get("/session/{session_id}/questions")
+async def get_session_questions(session_id: str):
+    sess = _sync_session_with_orchestrator(session_id)
+    if not sess:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {
+        "session_id": session_id,
+        "status": sess.get("status", "running"),
+        "questions": sess.get("questions", []),
+        "answers": sess.get("answers", {}),
+    }
+
+
+@app.post("/session/{session_id}/answers")
+async def submit_session_answers(
+    session_id: str,
+    answers: dict[str, str] = Body(...),
+):
+    sess = _sync_session_with_orchestrator(session_id)
+    if not sess:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if sess.get("status") in ("done", "error"):
+        raise HTTPException(status_code=409, detail="Session is already finished")
+
+    orch = sess.get("orchestrator")
+    if not orch:
+        raise HTTPException(status_code=409, detail="Orchestrator is not active")
+
+    accepted, missing = orch.submit_clarification_answers(answers)
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Missing answers for: {', '.join(missing)}",
+        )
+    if not accepted:
+        raise HTTPException(status_code=409, detail="No pending clarification questions")
+
+    sess["answers"].update({k: str(v) for k, v in answers.items() if str(v).strip()})
+    sess["questions"] = orch.get_pending_questions()
+    sess["status"] = "running"
+    sess["logs"].append("📝 Kullanıcı cevapları alındı, akış devam ediyor.")
+    return {"session_id": session_id, "status": "running", "accepted": list(sess["answers"].keys())}
 
 
 @app.get("/stream/{session_id}")
@@ -223,9 +340,48 @@ async def stream_logs(session_id: str):
     )
 
 
+@app.get("/logs/stream")
+async def stream_agent_logs(request: Request):
+    """SSE endpoint — streams live per-agent think/act/reflect log events."""
+
+    async def event_generator() -> AsyncGenerator[str, None]:
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+
+                try:
+                    event = await asyncio.wait_for(LOG_QUEUE.get(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    continue
+
+                payload = {
+                    "agent": event.agent_name,
+                    "stage": event.stage,
+                    "message": event.message,
+                    "tokens": event.tokens_used,
+                    "timestamp": event.timestamp,
+                }
+                yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+        finally:
+            return
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @app.get("/sessions")
 async def list_sessions():
     """Return summary of all sessions."""
+    for sid in list(sessions.keys()):
+        _sync_session_with_orchestrator(sid)
+
     return [
         {
             "session_id": sid,

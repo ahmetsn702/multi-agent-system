@@ -17,10 +17,31 @@ DOSYA YOLU KURALLARI (HER DOSYADA UYGULA):
   BASE_DIR = Path(__file__).parent
   # Tum dosya erisimi BASE_DIR uzerinden olmali
 
+📋 TEST IMPORT KURALLARI:
+- Test dosyası yazmadan önce src/ klasöründe main.py veya app.py olup olmadığını kontrol et
+- main.py varsa: from main import app
+- app.py varsa: from app import app
+- İkisi de varsa: main.py'yi tercih et
+- Hiçbiri yoksa: from main import app (orchestrator oluşturacak)
+
 Test dosyalarinda import:
   import sys
   from pathlib import Path
   sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+🧪 TEST CLIENT KURALLARI:
+- FastAPI testleri için MUTLAKA fastapi.testclient.TestClient kullan
+- httpx.AsyncClient KULLANMA (yeni httpx versiyonlarında hata verir)
+- @pytest.mark.asyncio decorator KULLANMA (TestClient senkron çalışır)
+- Örnek pattern:
+  from fastapi.testclient import TestClient
+  from main import app
+  
+  client = TestClient(app)
+  
+  def test_endpoint():  # async DEĞİL
+      response = client.get("/")
+      assert response.status_code == 200
 
 CIKTI FORMATI — KESINLIKLE BU FORMATI KULLAN:
 

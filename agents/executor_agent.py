@@ -439,8 +439,35 @@ class ExecutorAgent(BaseAgent):
         - Düz { ... } JSON
         
         Alias mapping ve argument normalization yapılır.
+        Truncated JSON'ı tamamlamaya çalışır.
         """
         import json
+        
+        def try_complete_json(json_str: str) -> Optional[dict]:
+            """Truncated JSON'ı tamamlamaya çalış."""
+            try:
+                return json.loads(json_str)
+            except json.JSONDecodeError:
+                # JSON incomplete - try to complete it
+                # Count open braces/brackets
+                open_braces = json_str.count('{') - json_str.count('}')
+                open_brackets = json_str.count('[') - json_str.count(']')
+                
+                # Check if we're in the middle of a string
+                in_string = json_str.count('"') % 2 == 1
+                
+                completed = json_str
+                if in_string:
+                    completed += '"'
+                
+                # Close any open brackets/braces
+                completed += ']' * open_brackets
+                completed += '}' * open_braces
+                
+                try:
+                    return json.loads(completed)
+                except json.JSONDecodeError:
+                    return None
         
         def normalize_tool_call(parsed: dict) -> Optional[dict]:
             """Tool call'u normalize et: alias'ları çöz ve argümanları düzenle."""
@@ -552,26 +579,24 @@ class ExecutorAgent(BaseAgent):
         pattern = r'```tool_call\s*(.*?)\s*```'
         match = re.search(pattern, response_text, re.DOTALL)
         if match:
-            try:
-                parsed = json.loads(match.group(1).strip())
+            parsed = try_complete_json(match.group(1).strip())
+            if parsed:
                 return normalize_tool_call(parsed)
-            except json.JSONDecodeError:
-                pass
 
         # Format 2: ```json ... ``` bloğunu dene
         pattern2 = r'```json\s*(.*?)\s*```'
         match2 = re.search(pattern2, response_text, re.DOTALL)
         if match2:
-            try:
-                parsed = json.loads(match2.group(1).strip())
+            parsed = try_complete_json(match2.group(1).strip())
+            if parsed:
                 return normalize_tool_call(parsed)
-            except json.JSONDecodeError:
-                pass
 
         # Format 3: Düz { ... } JSON'ı dene
         try:
             start = response_text.index('{')
+            # Try to find the end of JSON
             depth = 0
+            end_found = False
             for i, ch in enumerate(response_text[start:], start):
                 if ch == '{':
                     depth += 1
@@ -583,7 +608,17 @@ class ExecutorAgent(BaseAgent):
                         normalized = normalize_tool_call(parsed)
                         if normalized:
                             return normalized
+                        end_found = True
                         break
+            
+            # If no closing brace found, try to complete the JSON
+            if not end_found:
+                candidate = response_text[start:]
+                parsed = try_complete_json(candidate)
+                if parsed:
+                    normalized = normalize_tool_call(parsed)
+                    if normalized:
+                        return normalized
         except (ValueError, json.JSONDecodeError):
             pass
 

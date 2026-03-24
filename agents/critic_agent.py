@@ -7,35 +7,120 @@ from typing import Optional
 from core.base_agent import AgentResponse, BaseAgent, Task, ThoughtProcess
 from core.message_bus import MessageBus
 
-SYSTEM_PROMPT = """Sen kıdemli bir yazılım mimarı ve kod inceleme uzmanısın.
-Sana sunulan kodu/çıktıyı 5 kritere göre 1-10 aralığında puanla.
+SYSTEM_PROMPT = """You are the Critic agent inside MAOS — Multi-Agent Orchestration System.
 
-PUANLAMA KRİTERLERİ (her biri 1-10):
-  1. correctness    : Kod tam çalışıyor mu, eksik fonksiyon var mı?
-  2. quality        : PEP8, docstring, type hints, hata yönetimi
-  3. test_coverage  : Unit testler yazılmış mı, edge case'ler kapsanıyor mu?
-  4. architecture   : Dosya yapısı ve sınıf tasarımı mantıklı mı?
-  5. security       : Hardcoded path, güvensiz input, SQL injection vb. risk var mı?
+Your job is to review code produced by the Coder and score it. Your scores and feedback directly determine whether the code moves forward, gets revised, or triggers a full replan.
 
-KARAR KURALI:
-  Ortalama >= 7.0  →  ONAYLANIR  (approved: true)
-  Ortalama <  7.0  →  REVİZYON   (approved: false)
+## Core Responsibility
 
-ÇIKTI — YALNIZCA BU JSON FORMATI (Markdown, açıklama veya başka metin OLMAYACAK):
+Review submitted code files against the original task description. Score each dimension honestly based on actual code quality. Provide specific, actionable feedback. Do not be lenient. DO NOT default to middle scores — evaluate critically and vary your scores based on what you observe.
+
+## Scoring Rubric (1-10 scale)
+
+**1-2: Broken**
+- Code doesn't run at all
+- Syntax errors present
+- Missing core logic entirely
+- Critical security vulnerabilities
+
+**3-4: Partially Working**
+- Major functionality missing
+- Logic errors that break key features
+- No error handling whatsoever
+- Significant architectural problems
+
+**5-6: Works But Incomplete**
+- Basic functionality present but limited
+- Missing error handling for common cases
+- No tests or minimal test coverage
+- Code structure needs improvement
+- Missing edge case handling
+
+**7-8: Good**
+- Functional and meets requirements
+- Clean, readable code
+- Proper error handling
+- Good test coverage
+- Follows best practices
+
+**9-10: Excellent**
+- Production-ready code
+- Comprehensive tests including edge cases
+- Well-structured and maintainable
+- Security considerations addressed
+- Documentation present
+
+## Scoring Dimensions
+
+Score each dimension from 1 to 10 using the rubric above.
+
+**Correctness (1–10)**
+Does the code do what the task requires? A score below 5 here means the code should not proceed under any circumstances.
+
+**Quality (1–10)**
+Is the code well-structured, readable, and maintainable? Are functions focused? Are names clear?
+
+**Test Coverage (1–10)**
+Are tests present? Do they cover main logic paths, edge cases, and expected failure modes? Tests that only check the happy path score no higher than 5.
+
+**Architecture (1–10)**
+Does the structure make sense for the scale and purpose? Are concerns separated appropriately?
+
+**Security (1–10)**
+Are inputs validated? Are secrets handled correctly? Are there obvious injection risks?
+
+## Critical Instructions
+
+- EVALUATE HONESTLY: Do not default to 6.0 or middle scores
+- VARY YOUR SCORES: Different code quality should produce different scores
+- BE SPECIFIC: Each score must reflect actual observations in the code
+- JUSTIFY SCORES: Your feedback must explain why each dimension received its score
+
+## Decision Thresholds
+
+- **approve** (routing: EXECUTOR): Overall score 7.0 or above. Code moves to Executor.
+- **revise** (routing: CODER_REVISE): Overall score between 4.0 and 6.9. Return specific feedback.
+- **replan** (routing: PLANNER_REPLAN): Any dimension scores below 3, or correctness below 5.
+
+## Feedback Requirements
+
+For every dimension that scores below 7, provide at least one specific, actionable note. Do not write "improve error handling." Write "the file open operation on line 34 has no exception handler — if the file does not exist, the program crashes with an unhandled FileNotFoundError."
+
+## Output Format
+
+Return JSON only with numeric score and average fields:
+
 {
   "scores": {
     "correctness": 8,
-    "quality": 7,
-    "test_coverage": 6,
-    "architecture": 8,
+    "quality": 6,
+    "test_coverage": 5,
+    "architecture": 7,
     "security": 9
   },
-  "average": 7.6,
+  "average": 7.0,
   "approved": true,
-  "issues": ["sorun 1", "sorun 2"],
-  "improvements": ["iyileştirme 1"],
-  "summary": "genel değerlendirme 1-2 cümle"
-}"""
+  "issues": [
+    "quality: function process_document() is 87 lines — split into focused functions",
+    "test_coverage: add cases for empty input, malformed PDF, and file permission errors"
+  ],
+  "suggestions": [
+    "Extract validation logic into separate validator class",
+    "Add integration tests for the full pipeline"
+  ],
+  "summary": "Code is functional but needs refactoring and better test coverage"
+}
+
+## Behavior Principles
+
+Be consistent. Apply the same standards regardless of task complexity.
+
+Be specific. Every piece of feedback must point to something concrete in the code.
+
+Do not approve code you would not ship. You are the last line of defense before code hits disk.
+
+REMEMBER: Your score must reflect actual code quality. Do not default to 6.0. Evaluate and differentiate.
+"""
 
 
 class CriticAgent(BaseAgent):
@@ -79,12 +164,39 @@ class CriticAgent(BaseAgent):
         content_type = task.context.get("content_type", "output")
         revision_count = task.context.get("revision_count", 0)
 
+        # BUG FIX 2: Empty context check - skip review if no content to review
+        # This prevents false scores when critic is called with empty context
+        if not content_to_review or (isinstance(content_to_review, str) and len(content_to_review.strip()) < 10):
+            print("[Critic] ⚠️  Empty or minimal content provided (< 10 chars), skipping review")
+            return AgentResponse(
+                content={
+                    "score": 10.0,  # Perfect score since there's nothing to critique
+                    "approved": True,
+                    "routing": "EXECUTOR",
+                    "revision_count": revision_count,
+                    "scores": {},
+                    "issues": [],
+                    "suggestions": [],
+                    "improvements": [],
+                    "summary": "No content to review - auto-approved",
+                    "skipped": True,  # Flag to indicate this was skipped
+                },
+                success=True,
+                metadata={
+                    "score": 10.0,
+                    "approved": True,
+                    "routing": "EXECUTOR",
+                    "revision_count": revision_count,
+                    "skipped": True,
+                },
+            )
+
         review_prompt = (
             f"İçerik türü: {content_type}\n\n"
             f"İncelenecek içerik:\n{str(content_to_review)[:3000]}\n\n"
             "Bu çıktıyı 5 kritere göre değerlendir ve YALNIZCA JSON formatında yanıt ver:\n"
             '{"scores": {"correctness": 8, "quality": 7, "test_coverage": 6, "architecture": 8, "security": 9}, '
-            '"average": 7.6, "approved": true, "issues": [], "improvements": [], "summary": "kısa değerlendirme"}'
+            '"average": 7.6, "approved": true, "issues": [], "suggestions": [], "summary": "kısa değerlendirme"}'
         )
 
         response = await self._call_llm(
@@ -100,6 +212,10 @@ class CriticAgent(BaseAgent):
         scores = parsed.get("scores", {})
         score = parsed.get("average", 0)
 
+        # DEBUG: Log raw score to verify it varies
+        self.logger.debug(f"Critic raw score from LLM: {score}")
+        self.logger.debug(f"Critic individual scores: {scores}")
+
         # Compute average from scores dict if average missing
         if not score and scores:
             score = round(sum(scores.values()) / len(scores), 1)
@@ -112,6 +228,9 @@ class CriticAgent(BaseAgent):
 
         routing = self.route_by_score(int(score), revision_count)
 
+        # normalized field: use "suggestions" (legacy: "improvements")
+        suggestions = parsed.get("suggestions") or parsed.get("improvements") or []
+
         final_feedback = {
             "score": score,
             "approved": approved,
@@ -119,7 +238,8 @@ class CriticAgent(BaseAgent):
             "revision_count": revision_count,
             "scores": scores,
             "issues": parsed.get("issues", []),
-            "improvements": parsed.get("improvements", []),
+            "suggestions": suggestions,
+            "improvements": suggestions,
             "summary": parsed.get("summary", ""),
         }
 

@@ -99,7 +99,7 @@ def main():
     )
     
     # Kaydetme
-    save_path = r"C:\Users\ahmed\OneDrive\Masaüstü\Multi-Agent\MAOS_Kapsamli_Analiz_Raporu.docx"
+    save_path = "MAOS_Kapsamli_Analiz_Raporu.docx"
     doc.save(save_path)
     print(f"Rapor başarıyla oluşturuldu: {save_path}")
 
