@@ -162,7 +162,7 @@ doc.add_page_break()
 
 # 6 - CANLI
 h1('6. CANLIYA ALINAN OZELLIKLER')
-h2('Web Dashboard (98.80.144.72:8000/dashboard)')
+h2('Web Dashboard (EC2 Instance)')
 b('AWS EC2 Ubuntu 22.04, 7/24 systemd servisi')
 b('Aktif/gecmis session + gorev loglari'); b('Model bazli USD maliyet istatistikleri')
 b('10 sn otomatik yenileme, premium dark theme')
@@ -212,11 +212,9 @@ b('E-ticaret ve mobil app gibi buyuk projelerde test')
 b('Multi-modal UI tester (ekran goruntusu degerlendirme)')
 b('Docker container izolasyonu | TypeScript, Go, Java destegi')
 
-out = r'c:\Users\ahmed\OneDrive\Masaustu\MAOS_V5_Sunum.docx'
+out = 'MAOS_V5_Sunum.docx'
 try:
     doc.save(out)
     print(f'HAZIR: {out}')
-except Exception:
-    out = r'c:\Users\ahmed\Desktop\MAOS_V5_Sunum.docx'
-    doc.save(out)
-    print(f'HAZIR (Desktop): {out}')
+except Exception as e:
+    print(f'HATA: {e}')

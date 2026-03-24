@@ -15,4 +15,5 @@ def read_pdf(file_path):
     return text
 
 if __name__ == "__main__":
-    print(read_pdf(r"c:\Users\ahmed\OneDrive\Masaüstü\Multi-Agent\linter agent prompt.pdf"))
+    # Example: print(read_pdf("path/to/linter_agent_prompt.pdf"))
+    pass

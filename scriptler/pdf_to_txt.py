@@ -6,10 +6,10 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "PyMuPDF", "--quiet"])
     import fitz
 
-doc = fitz.open(r"c:\Users\ahmed\OneDrive\Masaüstü\Multi-Agent\linter agent prompt.pdf")
-text = ""
-for page in doc:
-    text += page.get_text()
-
-with open(r"c:\Users\ahmed\OneDrive\Masaüstü\Multi-Agent\linter_prompt.txt", "w", encoding="utf-8") as f:
-    f.write(text)
+# Example usage:
+# doc = fitz.open("path/to/input.pdf")
+# text = ""
+# for page in doc:
+#     text += page.get_text()
+# with open("output.txt", "w", encoding="utf-8") as f:
+#     f.write(text)

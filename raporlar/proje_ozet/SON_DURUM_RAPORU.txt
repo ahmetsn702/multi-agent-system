@@ -46,7 +46,7 @@ SİSTEM BİLEŞENLERİ:
    - Responsive tasarım
 
 5. ✅ TELEGRAM BOT
-   - Kullanıcı kimlik doğrulama (ID: 2091378122)
+   - Kullanıcı kimlik doğrulama (ID: ***REDACTED***)
    - Proje oluşturma komutları
    - ZIP dosyası gönderimi
    - Canlı durum bildirimleri
@@ -310,8 +310,8 @@ OPENROUTER_API_KEY=sk-or-v1-...
 GROQ_API_KEY=gsk_...
 
 # AWS Bedrock (opsiyonel)
-AWS_ACCESS_KEY_ID=...
-AWS_SECRET_ACCESS_KEY=...
+AWS_ACCESS_KEY_ID=***REDACTED***
+AWS_SECRET_ACCESS_KEY=***REDACTED***
 AWS_REGION=us-east-1
 
 # Telegram Bot
