@@ -460,13 +460,33 @@ class ExecutorAgent(BaseAgent):
                     success = True
                     break
             
-            # CONTEXT CLEANUP: Her 4 adımda bir eski adımları temizle (8+ mesaj)
-            if len(conversation) > 8:  # 4 mesaj çifti = 8 mesaj (önce: 12)
-                print(f"[Executor] 🧹 Context temizleniyor (>8 mesaj)")
-                # İlk görev mesajını tut, son 4 mesajı tut (2 adım)
+            # CONTEXT CLEANUP: Summarize middle messages instead of dropping them
+            if len(conversation) > 8:
+                print(f"[Executor] Context summarizing ({len(conversation)} messages)")
                 first_msg = conversation[0]
+                middle_msgs = conversation[1:-4]
                 recent_msgs = conversation[-4:]
-                conversation = [first_msg] + recent_msgs
+
+                # Build a compact summary of the middle steps
+                summary_parts = []
+                for msg in middle_msgs:
+                    content = msg.get("content", "")
+                    if msg["role"] == "assistant":
+                        # Extract tool call from assistant message
+                        summary_parts.append(f"  cmd: {content[:80]}")
+                    elif msg["role"] == "user" and content.startswith("$"):
+                        # Shell output — keep first line + exit code
+                        lines = content.splitlines()
+                        first_line = lines[0] if lines else ""
+                        exit_line = next((l for l in lines if "exit code" in l), "")
+                        summary_parts.append(f"  {first_line} {exit_line}".strip())
+
+                summary_text = (
+                    "--- Previous steps summary ---\n"
+                    + "\n".join(summary_parts[-6:])  # Keep last 6 entries
+                    + "\n--- End summary ---"
+                )
+                conversation = [first_msg, {"role": "user", "content": summary_text}] + recent_msgs
 
         else:
             # MAX_STEPS aşıldı

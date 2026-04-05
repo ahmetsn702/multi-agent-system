@@ -27,35 +27,38 @@ class VectorMemory:
         if not CHROMADB_AVAILABLE:
             self.enabled = False
             return
-        
-        self.enabled = True
-        
+
         # Default path: workspace/chroma_db/
         if db_path is None:
             workspace = Path(__file__).parent.parent / "workspace"
             db_path = str(workspace / "chroma_db")
-        
-        os.makedirs(db_path, exist_ok=True)
-        
-        # Initialize ChromaDB client
-        self.client = chromadb.PersistentClient(
-            path=db_path,
-            settings=Settings(
-                anonymized_telemetry=False,
-                allow_reset=True
+
+        try:
+            os.makedirs(db_path, exist_ok=True)
+
+            # Initialize ChromaDB client
+            self.client = chromadb.PersistentClient(
+                path=db_path,
+                settings=Settings(
+                    anonymized_telemetry=False,
+                    allow_reset=True
+                )
             )
-        )
-        
-        # Get or create collection
-        self.collection = self.client.get_or_create_collection(
-            name="project_memory",
-            metadata={"description": "Multi-agent project memory"}
-        )
-        
-        # Load embedding model (lightweight, fast)
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
-        
-        logging.info(f"[VectorMemory] Initialized with {self.collection.count()} projects")
+
+            # Get or create collection
+            self.collection = self.client.get_or_create_collection(
+                name="project_memory",
+                metadata={"description": "Multi-agent project memory"}
+            )
+
+            # Load embedding model (lightweight, fast)
+            self.model = SentenceTransformer('all-MiniLM-L6-v2')
+
+            self.enabled = True
+            logging.info(f"[VectorMemory] Initialized with {self.collection.count()} projects")
+        except Exception as e:
+            self.enabled = False
+            logging.warning(f"[VectorMemory] Init failed, vector search disabled: {e}")
     
     def add_project(
         self,

@@ -142,9 +142,15 @@ class SecurityAgent(BaseAgent):
                 detail="HTTPS yerine HTTP kullanimi tespit edildi.",
             )
 
-            # SQL injection: query concatenation
+            # SQL injection: query concatenation WITH user input flow
             if re.search(r"\b(select|insert|update|delete)\b", lowered):
-                if re.search(r"(\+|%|\.format\(|f['\"])", line):
+                has_string_concat = re.search(r"(\+|%|\.format\(|f['\"])", line)
+                # Only flag if user input could reach this query
+                has_user_input = any(indicator in lowered for indicator in (
+                    "input(", "sys.argv", "request.", "args.", "form.",
+                    "params.", "query.", "body.",
+                ))
+                if has_string_concat and has_user_input:
                     key = (str(file_path), idx, "SQL_INJECTION")
                     if key not in seen:
                         seen.add(key)
@@ -152,7 +158,18 @@ class SecurityAgent(BaseAgent):
                             "type": "SQL_INJECTION",
                             "severity": "HIGH",
                             "line": idx,
-                            "detail": f"{file_path}: SQL query string birlestirme/f-string ile kuruluyor.",
+                            "detail": f"{file_path}: SQL query kullanici girdisiyle string birlestirme/f-string ile kuruluyor.",
+                        })
+                elif has_string_concat:
+                    # String concat without obvious user input — lower severity
+                    key = (str(file_path), idx, "SQL_CONCAT_WARNING")
+                    if key not in seen:
+                        seen.add(key)
+                        issues.append({
+                            "type": "SQL_CONCAT_WARNING",
+                            "severity": "LOW",
+                            "line": idx,
+                            "detail": f"{file_path}: SQL query string birlestirme tespit edildi. Parameterized query tercih edin.",
                         })
 
             # Shell injection: subprocess + user input/shell=True

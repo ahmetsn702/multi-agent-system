@@ -65,8 +65,8 @@ def _ws_broadcast(event: dict) -> None:
         loop = asyncio.get_event_loop()
         if loop.is_running():
             loop.create_task(event_bus.broadcast(event))
-    except Exception:
-        pass
+    except Exception as e:
+        logging.warning(f"[WS Broadcast] Dashboard broadcast failed: {e}")
 CONFIDENCE_THRESHOLD = 0.6
 TASK_TIMEOUT_SECONDS = 360  # Increased from 180 to 360 to accommodate revision cycles
 TOTAL_TIMEOUT_SECONDS = 1200
@@ -197,6 +197,7 @@ class Orchestrator:
         self._avg_critic_score: float = 0.0
         self._file_write_locks: dict[str, asyncio.Lock] = {}
         self._file_write_locks_guard = asyncio.Lock()
+        self._session_lock = asyncio.Lock()  # Guards _session_results and _session_tasks
         self._session_results: list[dict] = []
         self._session_tasks: dict[str, Task] = {}
 
@@ -579,12 +580,13 @@ class Orchestrator:
         except Exception:
             pass
 
-    def _register_session_tasks(self, tasks: list[Task]) -> None:
+    async def _register_session_tasks(self, tasks: list[Task]) -> None:
         """Store tasks for partial timeout reporting."""
-        for task in tasks:
-            self._session_tasks[task.task_id] = task
+        async with self._session_lock:
+            for task in tasks:
+                self._session_tasks[task.task_id] = task
 
-    def _record_completed_result(self, results: list[dict], task: Task, result_content: Any) -> None:
+    async def _record_completed_result(self, results: list[dict], task: Task, result_content: Any) -> None:
         """Track successful task output both locally and for total-timeout partial returns."""
         result_payload = {
             "task_id": task.task_id,
@@ -594,7 +596,8 @@ class Orchestrator:
             "success": True,
         }
         results.append(result_payload)
-        self._session_results.append(result_payload)
+        async with self._session_lock:
+            self._session_results.append(result_payload)
 
     @staticmethod
     def _build_task_timeout_response(task: Task) -> AgentResponse:
@@ -715,15 +718,6 @@ class Orchestrator:
         slug = re.sub(r'[^a-z0-9]+', '-', normalized_goal).strip('-')
         if not slug:
             slug = "default"
-        slug = slug[:40]
-        self.current_project_slug = slug
-
-        # 2. & 3. workspace/projects/{slug}/ klasörünü ve alt klasörleri oluştur
-        project_dir = os.path.join("workspace", "projects", slug)
-        src_dir = os.path.join(project_dir, "src")
-        os.makedirs(src_dir, exist_ok=True)
-        tests_dir = os.path.join(project_dir, "tests")
-        os.makedirs(tests_dir, exist_ok=True)
         slug = slug[:40]
         self.current_project_slug = slug
 
@@ -911,7 +905,7 @@ class Orchestrator:
             if self.user_preferences_context:
                 task.context["user_preferences"] = self.user_preferences_context
             self._task_records[task.task_id] = TaskRecord(task)
-        self._register_session_tasks(tasks)
+        await self._register_session_tasks(tasks)
 
         # Step 3: Execute with ReAct loop
         final_results = await self._react_loop(tasks, user_goal)
@@ -1300,7 +1294,7 @@ class Orchestrator:
                 task.context["project_slug"] = slug
                 if self.user_preferences_context:
                     task.context["user_preferences"] = self.user_preferences_context
-            self._register_session_tasks(tasks)
+            await self._register_session_tasks(tasks)
 
             # Her faz başında: proje dosyalarındaki 3rd-party importları otomatik yükle
             await self._pre_install_project_deps(project_dir, slug)
@@ -1639,14 +1633,14 @@ class Orchestrator:
                     if result and result.success:
                         record.status = TaskStatus.COMPLETED
                         completed_ids.add(task.task_id)
-                        self._record_completed_result(results, task, result.content)
+                        await self._record_completed_result(results, task, result.content)
                         await self._emit_status(f"✅ Task {task.task_id} completed by {task.assigned_to}")
                     elif result and result.metadata.get("timed_out"):
                         record.status = TaskStatus.FAILED
                         record.attempts = record.max_attempts
                         completed_ids.add(task.task_id)
                         await self._emit_status(
-                            f"❌ Task {task.task_id} failed: Timeout: görev 3 dakikada tamamlanamadı"
+                            f"❌ Task {task.task_id} failed: Timeout: görev 6 dakikada tamamlanamadı"
                         )
                     else:
                         record.attempts += 1
@@ -1668,7 +1662,7 @@ class Orchestrator:
                                 print("[Orchestrator] ⚠️ Test hatası görmezden gelindi (Flet projesi)")
                                 record.status = TaskStatus.COMPLETED
                                 completed_ids.add(task.task_id)
-                                self._record_completed_result(
+                                await self._record_completed_result(
                                     results,
                                     task,
                                     "Completed with warnings (Flet test error ignored)",
@@ -1902,14 +1896,19 @@ class Orchestrator:
                     assigned_to="linter",
                     context={"project_slug": getattr(self, "current_project_slug", "default")},
                 )
-                lint_result = await self.linter.act(lint_task)
+                # think() + act() — act now requires thought parameter
+                lint_thought = await self.linter.think(lint_task)
+                lint_result = await self.linter.act(lint_thought, lint_task)
                 lint_data = lint_result.content if isinstance(lint_result.content, dict) else {}
 
-                if not lint_result.success and lint_data.get("critical_issues"):
-                    issues_text = "\n".join(lint_data["critical_issues"][:5])
+                lint_score = lint_data.get("final_score", 0)
+                has_critical = bool(lint_data.get("critical_issues"))
+
+                if not lint_result.success or (has_critical and lint_score < 8.0):
+                    issues_text = "\n".join(lint_data.get("critical_issues", [])[:5])
                     task.context["lint_issues"] = issues_text
-                    task.context["lint_score"] = lint_data.get("final_score", 0)
-                    print(f"[Orchestrator] Lint skoru düşük ({lint_data.get('final_score', 0):.1f}/10), Coder'a gönderiliyor")
+                    task.context["lint_score"] = lint_score
+                    print(f"[Orchestrator] Lint skoru dusuk ({lint_score:.1f}/10), Coder'a gonderiliyor")
                     record.status = TaskStatus.PENDING
                     record.attempts += 1
                     response.success = False
@@ -2039,9 +2038,9 @@ class Orchestrator:
                               f"{len(contract_data.get('api_endpoints', []))} endpoints, "
                               f"{len(contract_data.get('file_structure', []))} files")
                     except json.JSONDecodeError as e:
-                        print(f"[Orchestrator] Warning: Invalid contract JSON: {e}")
+                        logging.error(f"[Orchestrator] Contract parse failed for {project_slug}: {e}")
                     except Exception as e:
-                        print(f"[Orchestrator] Warning: Could not load contract: {e}")
+                        logging.warning(f"[Orchestrator] Could not load contract for {project_slug}: {e}")
                 
                 # Read existing files in the project to provide context
                 src_dir = project_root / "src"

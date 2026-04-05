@@ -71,11 +71,21 @@ def generate(project_path: str) -> dict:
                 continue
             try:
                 content = py_file.read_text(encoding="utf-8", errors="ignore")
+                # Single-line: import foo / from foo import bar
                 imports = re.findall(
-                    r'^(?:import|from)\s+([a-zA-Z_][a-zA-Z0-9_]*)',
+                    r'^(?:from)\s+([a-zA-Z_][a-zA-Z0-9_]*)',
                     content, re.MULTILINE
                 )
                 all_imports.update(imports)
+                # Comma-separated: import foo, bar, baz
+                for m in re.finditer(
+                    r'^import\s+([a-zA-Z_][\w]*(?:\s*,\s*[a-zA-Z_][\w]*)*)',
+                    content, re.MULTILINE
+                ):
+                    for pkg in m.group(1).split(","):
+                        name = pkg.strip().split(".")[0]
+                        if name:
+                            all_imports.add(name)
             except Exception:
                 pass
 

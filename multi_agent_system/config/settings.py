@@ -79,52 +79,19 @@ PROVIDER_CONFIG = {
 
 # Model Routing — ajan → model + provider
 MODEL_ROUTING = {
-    # "planner": {"model": "openrouter/hunter-alpha", "provider": "openrouter"},  # down - Mar 2026
-    # Eski provider: openrouter
-    # Tek-model deneyi: tum ajanlar Claude Sonnet 4.6
-    # "planner":      {"model": CLAUDE_SONNET_46, "provider": "blackbox"},
-    # "critic":       {"model": CLAUDE_SONNET_46, "provider": "blackbox"},
-    # "security":     {"model": CLAUDE_SONNET_46, "provider": "blackbox"},
-    # "optimizer":    {"model": CLAUDE_SONNET_46, "provider": "blackbox"},
-    # "researcher":   {"model": CLAUDE_SONNET_46, "provider": "blackbox"},
-    # "coder":        {"model": CLAUDE_SONNET_46, "provider": "blackbox"},
-    # "coder_fast":   {"model": CLAUDE_SONNET_46, "provider": "blackbox"},
-    # "docs":         {"model": CLAUDE_SONNET_46, "provider": "blackbox"},
-    # "executor":     {"model": CLAUDE_SONNET_46, "provider": "blackbox"},
-    # "tester":       {"model": CLAUDE_SONNET_46, "provider": "blackbox"},
-    # "linter":       {"model": CLAUDE_SONNET_46, "provider": "blackbox"},
-    # "builder":      {"model": CLAUDE_SONNET_46, "provider": "blackbox"},
-    # "ui_tester":    {"model": CLAUDE_SONNET_46, "provider": "blackbox"},
-    # "profiler":     {"model": CLAUDE_SONNET_46, "provider": "blackbox"},
-    # "analyzer":     {"model": CLAUDE_SONNET_46, "provider": "blackbox"},
-    # "orchestrator": {"model": CLAUDE_SONNET_46, "provider": "blackbox"},
-
-    # Hibrit mode
-    # "planner":      {"model": CLAUDE_SONNET_46,       "provider": "blackbox"},
-    # "researcher":   {"model": GEMINI_31_PRO_PREVIEW,  "provider": "blackbox"},
-    # "coder":        {"model": GEMINI_31_PRO_PREVIEW,  "provider": "blackbox"},
-    # "coder_fast":   {"model": MINIMAX_M25,            "provider": "blackbox"},
-    # "critic":       {"model": CLAUDE_SONNET_46,       "provider": "blackbox"},
-    # "executor":     {"model": GEMINI_31_PRO_PREVIEW,  "provider": "blackbox"},
-    # "security":     {"model": MINIMAX_M25,            "provider": "blackbox"},
-    # "optimizer":    {"model": MINIMAX_M25,            "provider": "blackbox"},
-    # "docs":         {"model": MINIMAX_M25,            "provider"    # "planner":      {"model": "blackboxai/anthropic/claude-sonnet-4.6",   "provider": "blackbox"},
+    # Core pipeline (Vertex AI — free tier Gemini 2.5 Flash)
     "planner":      {"model": "gemini-2.5-flash",   "provider": "vertex"},
-    # "researcher":   {"model": "blackboxai/anthropic/claude-haiku-4.5",     "provider": "blackbox"},
-    "researcher":   {"model": "gemini-2.5-flash", "provider": "vertex"},
-    # NEW: Architect agent routing
-    "architect":    {"model": "gemini-2.5-flash", "provider": "vertex"},
-    # "coder":        {"model": "blackboxai/anthropic/claude-haiku-4.5",     "provider": "blackbox"},
+    "researcher":   {"model": "gemini-2.5-flash",   "provider": "vertex"},
+    "architect":    {"model": "gemini-2.5-flash",   "provider": "vertex"},
     "coder":        {"model": "gemini-2.5-flash",   "provider": "vertex"},
-    # "coder_fast":   {"model": "blackboxai/anthropic/claude-haiku-4.5",     "provider": "blackbox"},
-    "coder_fast":   {"model": "gemini-2.5-flash", "provider": "vertex"},
-    # "critic":       {"model": "blackboxai/anthropic/claude-sonnet-4.6",   "provider": "blackbox"},
+    "coder_fast":   {"model": "gemini-2.5-flash",   "provider": "vertex"},
     "critic":       {"model": "gemini-2.5-flash",   "provider": "vertex"},
-    # "executor":     {"model": "blackboxai/anthropic/claude-haiku-4.5",     "provider": "blackbox"},
-    "executor":     {"model": "gemini-2.5-flash", "provider": "vertex"},
+    "executor":     {"model": "gemini-2.5-flash",   "provider": "vertex"},
+    "optimizer":    {"model": "gemini-2.5-flash",   "provider": "vertex"},
+    "orchestrator": {"model": VERTEX_GEMINI_20_FLASH_001, "provider": "vertex"},
+
+    # Auxiliary agents (Blackbox — Claude Haiku, Qwen, Devstral)
     "security":     {"model": "blackboxai/anthropic/claude-haiku-4.5",     "provider": "blackbox"},
-    # "optimizer":    {"model": "blackboxai/anthropic/claude-haiku-4.5",     "provider": "blackbox"},
-    "optimizer":    {"model": "gemini-2.5-flash", "provider": "vertex"},
     "docs":         {"model": "blackboxai/anthropic/claude-haiku-4.5",     "provider": "blackbox"},
     "tester":       {"model": "blackboxai/anthropic/claude-haiku-4.5",     "provider": "blackbox"},
     "linter":       {"model": "blackboxai/qwen/qwen3-coder:free",          "provider": "blackbox"},
@@ -132,8 +99,6 @@ MODEL_ROUTING = {
     "ui_tester":    {"model": "blackboxai/anthropic/claude-haiku-4.5",     "provider": "blackbox"},
     "profiler":     {"model": "blackboxai/anthropic/claude-haiku-4.5",     "provider": "blackbox"},
     "analyzer":     {"model": "blackboxai/anthropic/claude-haiku-4.5",     "provider": "blackbox"},
-    # "orchestrator": {"model": CLAUDE_SONNET_46,       "provider": "blackbox"},
-    "orchestrator": {"model": VERTEX_GEMINI_20_FLASH_001, "provider": "vertex"},
 }
 
 # Per-model HTTP timeout (saniye)
@@ -219,7 +184,8 @@ TOKEN_BUDGET = {
         "per_agent": {
             "planner": 4000,
             "architect": 4000,
-            "coder": 8192,
+            "coder": 16384,
+            "coder_fast": 16384,
             "critic": 2000,
             "orchestrator": 4000,
         }
@@ -294,12 +260,12 @@ TOKEN_BUDGET = {
         "per_agent": {
             "planner":    8192,
             "architect":  4096,
-            "coder":      8192,
+            "coder":      16384,
             "critic":     4096,
             "optimizer":  4096,
             "researcher": 4096,
-            "coder_fast": 8192,
-            "executor":   4096,  # Increased from 2048 to prevent JSON truncation
+            "coder_fast": 16384,
+            "executor":   4096,
         }
     },
 }

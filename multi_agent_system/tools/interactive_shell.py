@@ -10,6 +10,7 @@ Stateful, persistent shell session — Devin AI tarzı interaktif terminal.
 """
 import os
 import locale
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -131,10 +132,16 @@ class InteractiveShell:
 
             # cd komutunu yakala ve cwd'yi güncelle
             if command.strip().startswith("cd ") and proc.returncode == 0:
-                new_dir = command.strip()[3:].strip().strip('"').strip("'")
-                candidate = (self.cwd / new_dir).resolve()
-                if candidate.exists():
-                    self.cwd = candidate
+                try:
+                    parts = shlex.split(command.strip())
+                    if len(parts) >= 2:
+                        new_dir = parts[1]
+                        candidate = (self.cwd / new_dir).resolve()
+                        if candidate.exists():
+                            self.cwd = candidate
+                except ValueError:
+                    # shlex parse error (e.g. unmatched quotes) — skip cd tracking
+                    pass
 
             result = {
                 "success": proc.returncode == 0,

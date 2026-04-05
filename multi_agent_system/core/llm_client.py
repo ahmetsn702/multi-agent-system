@@ -94,18 +94,22 @@ class RateLimiter:
         self.max_requests = max_requests
         self.window_seconds = window_seconds
         self.requests = deque()
+        self._lock = asyncio.Lock()
 
     async def acquire(self):
+        async with self._lock:
+            self._clean_window()
+            if len(self.requests) >= self.max_requests:
+                wait_time = self.window_seconds - (time.time() - self.requests[0]) + 1
+                print(f"[RATE LIMIT] {wait_time:.1f}s bekleniyor...")
+                await asyncio.sleep(wait_time)
+                self._clean_window()
+            self.requests.append(time.time())
+
+    def _clean_window(self):
         now = time.time()
         while self.requests and now - self.requests[0] > self.window_seconds:
             self.requests.popleft()
-
-        if len(self.requests) >= self.max_requests:
-            wait_time = self.window_seconds - (now - self.requests[0]) + 1
-            print(f"[RATE LIMIT] {wait_time:.1f}s bekleniyor...")
-            await asyncio.sleep(wait_time)
-
-        self.requests.append(time.time())
 
 
 _rate_limiter = RateLimiter(max_requests=50, window_seconds=10)

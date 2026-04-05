@@ -5,8 +5,10 @@ Run: uvicorn api.main_api:app --host 0.0.0.0 --port 8000 --reload
 Access from Android: http://<PC_LOCAL_IP>:8000
 """
 import asyncio
+import hashlib
 import json
 import os
+import secrets
 import sys
 import uuid
 from datetime import datetime, timedelta
@@ -29,7 +31,22 @@ os.chdir(ROOT)  # so workspace/ paths resolve correctly
 from dotenv import load_dotenv
 load_dotenv()
 
-app = FastAPI(title="Multi-Agent System API", version="1.0.0")
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def _lifespan(application: FastAPI):
+    """Startup/shutdown lifecycle: start session cleanup task."""
+    async def _cleanup_loop():
+        while True:
+            await asyncio.sleep(600)  # 10 minutes
+            removed = _cleanup_expired_sessions()
+            if removed:
+                print(f"[Session Cleanup] Removed {removed} expired sessions")
+    cleanup_task = asyncio.create_task(_cleanup_loop())
+    yield
+    cleanup_task.cancel()
+
+app = FastAPI(title="Multi-Agent System API", version="1.0.0", lifespan=_lifespan)
 
 # Allow all origins (local network access from Android browser)
 app.add_middleware(
@@ -50,9 +67,54 @@ app.include_router(_dashboard_ws_router)
 
 # ── Auth config ────────────────────────────────────────────────────────────
 WEB_PASSWORD = os.getenv("WEB_PASSWORD")  # Must be set in .env
-SESSION_TOKEN = "mas_session"          # cookie name
-# Public paths that don't need auth
-PUBLIC = {"/login", "/health", "/static", "/ws/dashboard", "/api/dashboard/state"}
+SESSION_COOKIE = "mas_session"         # cookie name
+# Server-side session store: token → {"created_at": datetime}
+_auth_sessions: dict[str, dict] = {}
+
+def _verify_password(password: str) -> bool:
+    """Compare password using constant-time hash comparison."""
+    if not WEB_PASSWORD:
+        return False
+    return hashlib.sha256(password.encode()).hexdigest() == hashlib.sha256(WEB_PASSWORD.encode()).hexdigest()
+
+def _create_session() -> str:
+    """Create a new session token and store it server-side."""
+    token = secrets.token_urlsafe(32)
+    csrf_token = secrets.token_urlsafe(16)
+    _auth_sessions[token] = {"created_at": datetime.now(), "csrf_token": csrf_token}
+    return token
+
+def _get_csrf_token(session_token: str | None) -> str:
+    """Get CSRF token for a session."""
+    if not session_token or session_token not in _auth_sessions:
+        return ""
+    return _auth_sessions[session_token].get("csrf_token", "")
+
+def _is_valid_session(token: str | None) -> bool:
+    """Check if session token exists and is not expired (30 days)."""
+    if not token or token not in _auth_sessions:
+        return False
+    session = _auth_sessions[token]
+    if datetime.now() - session["created_at"] > timedelta(days=30):
+        _auth_sessions.pop(token, None)
+        return False
+    return True
+
+def _invalidate_session(token: str | None):
+    """Remove a session token."""
+    if token:
+        _auth_sessions.pop(token, None)
+
+def _cleanup_expired_sessions():
+    """Remove expired sessions from the store."""
+    now = datetime.now()
+    expired = [
+        tok for tok, data in _auth_sessions.items()
+        if now - data["created_at"] > timedelta(days=30)
+    ]
+    for tok in expired:
+        _auth_sessions.pop(tok, None)
+    return len(expired)
 
 # ── Brute Force Koruması ────────────────────────────────────────────────────
 MAX_ATTEMPTS = 5          # Maks hatalı deneme
@@ -86,8 +148,48 @@ def _record_failed(ip: str):
 def _clear_attempts(ip: str):
     _login_attempts.pop(ip, None)
 
-from fastapi.responses import RedirectResponse
+from collections import deque
+import time as _time
+
+from fastapi.responses import RedirectResponse, JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+
+# ── Rate Limiting ─────────────────────────────────────────────────────────────
+_rate_limits: dict[str, deque] = {}  # "ip:path_group" → deque of timestamps
+RATE_LIMIT_RUN = 5       # /run: 5 requests per minute
+RATE_LIMIT_POST = 30     # other POST: 30 requests per minute
+RATE_WINDOW = 60         # sliding window in seconds
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if request.method not in ("POST", "PUT", "DELETE"):
+            return await call_next(request)
+
+        path = request.url.path
+        # Skip login (has its own brute-force protection)
+        if path == "/login":
+            return await call_next(request)
+
+        ip = _get_client_ip(request)
+        limit = RATE_LIMIT_RUN if path == "/run" else RATE_LIMIT_POST
+        bucket_key = f"{ip}:{path}" if path == "/run" else f"{ip}:post"
+
+        now = _time.time()
+        bucket = _rate_limits.setdefault(bucket_key, deque())
+
+        # Clean old entries
+        while bucket and now - bucket[0] > RATE_WINDOW:
+            bucket.popleft()
+
+        if len(bucket) >= limit:
+            return JSONResponse(
+                {"error": f"Rate limit exceeded ({limit}/min)"},
+                status_code=429,
+            )
+
+        bucket.append(now)
+        return await call_next(request)
 
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -101,13 +203,21 @@ class AuthMiddleware(BaseHTTPMiddleware):
             or path.startswith("/api/dashboard")
         ):
             return await call_next(request)
-        # Check cookie
-        token = request.cookies.get(SESSION_TOKEN)
-        if token != WEB_PASSWORD:
+        # Check session token
+        token = request.cookies.get(SESSION_COOKIE)
+        if not _is_valid_session(token):
             return RedirectResponse(url="/login", status_code=302)
+        # CSRF validation for state-changing requests (POST/PUT/DELETE)
+        if request.method in ("POST", "PUT", "DELETE") and path != "/login":
+            csrf_from_header = request.headers.get("X-CSRF-Token", "")
+            csrf_expected = _get_csrf_token(token)
+            if csrf_expected and csrf_from_header != csrf_expected:
+                from fastapi.responses import JSONResponse
+                return JSONResponse({"error": "CSRF token invalid"}, status_code=403)
         return await call_next(request)
 
 app.add_middleware(AuthMiddleware)
+app.add_middleware(RateLimitMiddleware)
 
 # ── Login page ─────────────────────────────────────────────────────────────
 LOGIN_HTML = """<!DOCTYPE html><html><head>
@@ -157,10 +267,11 @@ async def login_submit(request: Request):
         return HTMLResponse(LOGIN_HTML.replace("%ERROR%", msg), status_code=429)
     form = await request.form()
     password = form.get("password", "")
-    if password == WEB_PASSWORD:
+    if _verify_password(password):
         _clear_attempts(ip)
+        token = _create_session()
         response = RedirectResponse(url="/", status_code=302)
-        response.set_cookie(SESSION_TOKEN, WEB_PASSWORD, httponly=True, max_age=86400*30)
+        response.set_cookie(SESSION_COOKIE, token, httponly=True, max_age=86400*30)
         return response
     _record_failed(ip)
     locked2, _ = _is_locked(ip)
@@ -172,9 +283,11 @@ async def login_submit(request: Request):
     return HTMLResponse(LOGIN_HTML.replace("%ERROR%", msg), status_code=401)
 
 @app.get("/logout")
-async def logout():
+async def logout(request: Request):
+    token = request.cookies.get(SESSION_COOKIE)
+    _invalidate_session(token)
     response = RedirectResponse(url="/login", status_code=302)
-    response.delete_cookie(SESSION_TOKEN)
+    response.delete_cookie(SESSION_COOKIE)
     return response
 
 
@@ -378,6 +491,14 @@ async def download_project(project_slug: str):
 @app.get("/health")
 async def health():
     return {"status": "ok", "version": "2.0.0"}
+
+
+@app.get("/csrf-token")
+async def get_csrf(request: Request):
+    """Return CSRF token for the current session (used by frontend JS)."""
+    token = request.cookies.get(SESSION_COOKIE)
+    csrf = _get_csrf_token(token)
+    return {"csrf_token": csrf}
 
 
 # ── Reverse Engineering: /analyze endpoint ──────────────────────────────────

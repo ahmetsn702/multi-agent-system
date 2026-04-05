@@ -7,22 +7,6 @@ import os
 import sys
 import tempfile
 import time
-from typing import Optional
-
-from core.base_agent import ToolResult
-
-DEFAULT_TIMEOUT = 30
-
-
-"""
-tools/code_runner.py
-Execute Python code in a subprocess sandbox with timeout and resource limits.
-"""
-import asyncio
-import os
-import sys
-import tempfile
-import time
 from pathlib import Path
 from typing import Optional
 

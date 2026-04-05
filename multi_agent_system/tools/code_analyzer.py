@@ -142,7 +142,7 @@ def analyze_project(project_path: str) -> dict:
             return
 
         for i, entry in enumerate(entries):
-            if _should_skip(entry):
+            if _should_skip(entry) or entry.is_symlink():
                 continue
             connector = "└── " if i == len(entries) - 1 else "├── "
             structure_lines.append(f"{prefix}{connector}{entry.name}")
@@ -234,17 +234,15 @@ def read_zip(zip_path: str) -> dict:
     if not zipfile.is_zipfile(zip_path):
         return {"error": f"Geçerli bir ZIP dosyası değil: {zip_path}"}
 
-    tmp_dir = tempfile.mkdtemp(prefix="mas_analyze_")
     try:
-        with zipfile.ZipFile(zip_path, "r") as zf:
-            zf.extractall(tmp_dir)
-        result = analyze_project(tmp_dir)
-        result["source"] = f"zip:{zip_path.name}"
-        return result
+        with tempfile.TemporaryDirectory(prefix="mas_analyze_") as tmp_dir:
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                zf.extractall(tmp_dir)
+            result = analyze_project(tmp_dir)
+            result["source"] = f"zip:{zip_path.name}"
+            return result
     except Exception as e:
         return {"error": f"ZIP açma hatası: {e}"}
-    finally:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 def read_github(url: str, branch: str = "main") -> dict:
@@ -265,35 +263,33 @@ def read_github(url: str, branch: str = "main") -> dict:
     if shutil.which("git") is None:
         return {"error": "git komutu bulunamadı. Git yüklü mü?"}
 
-    tmp_dir = tempfile.mkdtemp(prefix="mas_github_")
     try:
-        print(f"[CodeAnalyzer] GitHub'dan klonlanıyor: {url}")
-        result = subprocess.run(
-            ["git", "clone", "--depth", "1", "--branch", branch, url, tmp_dir],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        if result.returncode != 0:
-            # Branch adı yanlış olabilir, master dene
-            result2 = subprocess.run(
-                ["git", "clone", "--depth", "1", url, tmp_dir],
+        with tempfile.TemporaryDirectory(prefix="mas_github_") as tmp_dir:
+            print(f"[CodeAnalyzer] GitHub'dan klonlanıyor: {url}")
+            result = subprocess.run(
+                ["git", "clone", "--depth", "1", "--branch", branch, url, tmp_dir],
                 capture_output=True,
                 text=True,
                 timeout=60,
             )
-            if result2.returncode != 0:
-                return {"error": f"Git clone hatası: {result2.stderr[:300]}"}
+            if result.returncode != 0:
+                # Branch adı yanlış olabilir, master dene
+                result2 = subprocess.run(
+                    ["git", "clone", "--depth", "1", url, tmp_dir],
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                )
+                if result2.returncode != 0:
+                    return {"error": f"Git clone hatası: {result2.stderr[:300]}"}
 
-        analysis = analyze_project(tmp_dir)
-        analysis["source"] = f"github:{url}"
-        return analysis
+            analysis = analyze_project(tmp_dir)
+            analysis["source"] = f"github:{url}"
+            return analysis
     except subprocess.TimeoutExpired:
         return {"error": "Git clone timeout (60s). Repo çok büyük olabilir."}
     except Exception as e:
         return {"error": f"GitHub clone hatası: {e}"}
-    finally:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 def analyze_from_source(source: str) -> dict:

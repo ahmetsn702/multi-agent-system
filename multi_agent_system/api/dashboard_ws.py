@@ -156,20 +156,51 @@ def ws_broadcast(event: dict) -> None:
 # Routes
 # ---------------------------------------------------------------------------
 
+# Allowed inbound WebSocket message types from clients
+_ALLOWED_WS_TYPES = {"ping", "pong", "subscribe", "unsubscribe"}
+_MAX_WS_MESSAGE_LEN = 1024  # Max message size from client
+
+
 @router.websocket("/ws/dashboard")
 async def websocket_dashboard(ws: WebSocket):
     """WebSocket endpoint — streams all MAOS events as JSON lines."""
     await event_bus.connect(ws)
     try:
-        # Keep alive: echo pings back, otherwise just wait for disconnect
         while True:
             try:
                 data = await asyncio.wait_for(ws.receive_text(), timeout=30.0)
-                # Echo ping/heartbeat back
-                if data == "ping":
+
+                # Size check
+                if len(data) > _MAX_WS_MESSAGE_LEN:
+                    await ws.send_text(json.dumps({"type": "error", "message": "Message too large"}))
+                    continue
+
+                # Simple string commands
+                if data in ("ping", "pong"):
                     await ws.send_text(json.dumps({"type": "pong"}))
+                    continue
+
+                # JSON payload validation
+                try:
+                    msg = json.loads(data)
+                except (json.JSONDecodeError, ValueError):
+                    await ws.send_text(json.dumps({"type": "error", "message": "Invalid JSON"}))
+                    continue
+
+                if not isinstance(msg, dict):
+                    await ws.send_text(json.dumps({"type": "error", "message": "Expected JSON object"}))
+                    continue
+
+                msg_type = msg.get("type", "")
+                if msg_type not in _ALLOWED_WS_TYPES:
+                    await ws.send_text(json.dumps({"type": "error", "message": f"Unknown type: {msg_type}"}))
+                    continue
+
+                # Handle known types
+                if msg_type == "ping":
+                    await ws.send_text(json.dumps({"type": "pong"}))
+
             except asyncio.TimeoutError:
-                # Send keepalive
                 try:
                     await ws.send_text(json.dumps({"type": "ping"}))
                 except Exception:

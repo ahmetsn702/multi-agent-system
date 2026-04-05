@@ -227,15 +227,15 @@ class CriticAgent(BaseAgent):
         if not use_default:
             return {}
 
-        # REMOVED HARDCODED DEFAULT: No longer returning 6.0 by default
-        # If we reach here, parsing failed completely - default to 5.0 (neutral)
-        self.logger.warning(f"Failed to parse critic response, defaulting to 5.0: {cleaned[:200]}")
+        # Parsing failed completely — return UNSCORED status
+        self.logger.warning(f"Failed to parse critic response: {cleaned[:200]}")
         return {
-            "score": 5.0,
+            "score": 0.0,
             "approved": False,
-            "issues": ["Failed to parse LLM response"],
-            "suggestions": ["Retry the review"],
-            "summary": "Parse error - defaulting to neutral score",
+            "status": "UNSCORED",
+            "issues": ["Failed to parse LLM response after retry"],
+            "suggestions": ["Re-run the review"],
+            "summary": "UNSCORED - critic response could not be parsed",
         }
 
     async def act(self, thought: ThoughtProcess, task: Task) -> AgentResponse:
@@ -244,25 +244,24 @@ class CriticAgent(BaseAgent):
         content_type = task.context.get("content_type", "output")
         revision_count = task.context.get("revision_count", 0)
         
-        # BUG FIX 2: Empty context check - skip review if no content to review
-        # This prevents false 1.0 scores when critic is called with empty context
+        # Empty content check — no code to evaluate means score 0
         if not content_to_review or (isinstance(content_to_review, str) and len(content_to_review.strip()) < 10):
-            print("[Critic] ⚠️  Empty or minimal content provided (< 10 chars), skipping review")
+            print("[Critic] ⚠️  Empty or minimal content provided (< 10 chars), scoring 0.0")
             return AgentResponse(
                 content={
-                    "score": 10.0,  # Perfect score since there's nothing to critique
-                    "approved": True,
-                    "routing": "EXECUTOR",
+                    "score": 0.0,
+                    "approved": False,
+                    "routing": "CODER_REVISE",
                     "revision_count": revision_count,
                     "scores": {},
-                    "issues": [],
-                    "suggestions": [],
+                    "issues": ["Empty content - no code to evaluate"],
+                    "suggestions": ["Generate actual code for the task"],
                     "improvements": [],
-                    "summary": "No content to review - auto-approved",
-                    "skipped": True,  # Flag to indicate this was skipped
+                    "summary": "No content to review - cannot approve empty output",
+                    "skipped": True,
                 },
                 success=True,
-                metadata={"score": 10.0, "approved": True, "skipped": True},
+                metadata={"score": 0.0, "approved": False, "skipped": True},
             )
         
         # GELİŞTİRME 6: Screenshot path kontrolü ve base64 encoding
@@ -404,9 +403,10 @@ class CriticAgent(BaseAgent):
             score = round(sum(scores.values()) / len(scores), 1)
             self.logger.debug(f"Critic computed score from individual scores: {score}")
         elif not score:
-            # If parsing completely failed, default to 5.0 (neutral) not 0.0
-            self.logger.warning("Critic score extraction failed, defaulting to 5.0")
-            score = 5.0
+            # If parsing completely failed, mark as UNSCORED
+            self.logger.warning("Critic score extraction failed, marking UNSCORED")
+            score = 0.0
+            parsed["status"] = "UNSCORED"
 
         # BUG FIX 1: approved default False olmalı (True değil!)
         approved = parsed.get("approved", False)

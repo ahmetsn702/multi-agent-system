@@ -1,3 +1,6 @@
+# Legacy codebase (OpenRouter + Groq era, 6 agents)
+_legacy/
+
 # IDE / workspace temp files
 .claude/
 .hypothesis/
@@ -109,3 +112,8 @@ test_onysoft.py
 # Large data files
 *.sqlite
 *.db
+
+# Completion plan (development artifact)
+MAOS_COMPLETION_PLAN.md
+MAOS_Kapsamli_Analiz_Raporu.docx
+multi_agent_system_sanitized.zip

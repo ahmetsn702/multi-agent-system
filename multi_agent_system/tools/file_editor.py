@@ -1,13 +1,32 @@
 """
 tools/file_editor.py
 FileEditor: Mevcut dosyaları satır bazında düzenler.
+Tüm düzenlemeler workspace dizini içinde sandbox'lanmıştır.
 """
+import os
 from pathlib import Path
+from typing import Optional
+
+WORKSPACE_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "workspace")
+)
+
+
+def _safe_path(file_path: str) -> Optional[str]:
+    """Resolve path and verify it stays inside WORKSPACE_DIR."""
+    resolved = os.path.abspath(file_path)
+    if not resolved.startswith(WORKSPACE_DIR):
+        return None
+    return resolved
 
 
 def replace_in_file(file_path: str, old_text: str, new_text: str) -> dict:
     """Dosyada metin bul ve değiştir. Yedek (.bak) oluşturur."""
-    path = Path(file_path)
+    safe = _safe_path(file_path)
+    if not safe:
+        return {"success": False, "error": f"Güvenlik hatası: {file_path} workspace dışında, düzenleme engellendi."}
+
+    path = Path(safe)
     if not path.exists():
         return {"success": False, "error": f"Dosya bulunamadı: {file_path}"}
 
@@ -26,7 +45,11 @@ def replace_in_file(file_path: str, old_text: str, new_text: str) -> dict:
 
 def replace_lines(file_path: str, start_line: int, end_line: int, new_content: str) -> dict:
     """Belirtilen satır aralığını yeni içerikle değiştir. Yedek (.bak) oluşturur."""
-    path = Path(file_path)
+    safe = _safe_path(file_path)
+    if not safe:
+        return {"success": False, "error": f"Güvenlik hatası: {file_path} workspace dışında, düzenleme engellendi."}
+
+    path = Path(safe)
     if not path.exists():
         return {"success": False, "error": f"Dosya bulunamadı: {file_path}"}
 

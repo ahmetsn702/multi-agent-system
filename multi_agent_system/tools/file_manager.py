@@ -15,7 +15,19 @@ WORKSPACE_DIR = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "workspace")
 )
 
-_file_locks: dict = {}
+_file_locks: dict[str, asyncio.Lock] = {}
+_MAX_LOCKS = 200
+
+
+def _get_lock(key: str) -> asyncio.Lock:
+    """Get or create a file lock, cleaning up stale unlocked entries when too many."""
+    if key not in _file_locks:
+        if len(_file_locks) > _MAX_LOCKS:
+            stale = [k for k, v in _file_locks.items() if not v.locked()]
+            for k in stale:
+                del _file_locks[k]
+        _file_locks[key] = asyncio.Lock()
+    return _file_locks[key]
 
 def _safe_path(relative_path: str) -> Optional[str]:
     """Resolve path and verify it stays inside WORKSPACE_DIR."""
@@ -60,17 +72,15 @@ async def write_file(path: str, content: str, mode: str = "w") -> ToolResult:
             return ToolResult(success=False, data=None, error=f"Güvenlik ihlali: {path} workspace dışında!")
         target = Path(safe)
 
-    try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-    except Exception as e:
-        print(f"[FileManager] ❌ Klasör oluşturulamadı: {target.parent} — {e}")
-        return ToolResult(success=False, data=None, error=f"Klasör oluşturulamadı: {e}")
+    lock = _get_lock(str(target))
 
-    lock_key = str(target)
-    if lock_key not in _file_locks:
-        _file_locks[lock_key] = asyncio.Lock()
+    async with lock:
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            print(f"[FileManager] ❌ Klasör oluşturulamadı: {target.parent} — {e}")
+            return ToolResult(success=False, data=None, error=f"Klasör oluşturulamadı: {e}")
 
-    async with _file_locks[lock_key]:
         try:
             with open(str(target), mode, encoding="utf-8") as f:
                 f.write(content)
@@ -78,7 +88,7 @@ async def write_file(path: str, content: str, mode: str = "w") -> ToolResult:
             return ToolResult(success=True, data={"path": str(target), "size_bytes": target.stat().st_size})
         except Exception as e:
             print(f"[FileManager] ❌ HATA: {target} — {e}")
-            raise  # Hatayı yukarı ilet, sessizce kapanmasın
+            raise
 
 def ensure_project_structure(slug: str) -> dict:
     """Proje klasör yapısını garantile — her görev başında çağır"""
@@ -257,11 +267,9 @@ async def patch_file(path: str, old_text: str, new_text: str) -> ToolResult:
     if not target.exists():
         return ToolResult(success=False, data=None, error=f"Dosya bulunamadı: {path}")
 
-    lock_key = str(target)
-    if lock_key not in _file_locks:
-        _file_locks[lock_key] = asyncio.Lock()
+    lock = _get_lock(str(target))
 
-    async with _file_locks[lock_key]:
+    async with lock:
         try:
             with open(str(target), "r", encoding="utf-8") as f:
                 content = f.read()

@@ -40,51 +40,62 @@ class DocsAgent(BaseAgent):
         context = task.context or {}
         project_slug = str(context.get("project_slug", "default")).strip() or "default"
         project_dir = Path(context.get("project_dir") or (Path("workspace/projects") / project_slug))
-        docs_dir = project_dir / "docs"
-        docs_dir.mkdir(parents=True, exist_ok=True)
 
-        py_files = self._collect_python_files(project_dir)
-        doc_summaries = self._collect_docstring_summaries(py_files, project_dir)
-        endpoints = self._collect_endpoints(py_files, project_dir)
-        requirements = self._read_requirements(project_dir / "requirements.txt")
-        goal = str(context.get("goal", task.description)).strip()
+        try:
+            docs_dir = project_dir / "docs"
+            docs_dir.mkdir(parents=True, exist_ok=True)
 
-        readme_content = self._build_readme(
-            project_slug=project_slug,
-            goal=goal,
-            py_files=py_files,
-            doc_summaries=doc_summaries,
-            endpoints=endpoints,
-            requirements=requirements,
-            project_dir=project_dir,
-        )
+            py_files = self._collect_python_files(project_dir)
+            doc_summaries = self._collect_docstring_summaries(py_files, project_dir)
+            endpoints = self._collect_endpoints(py_files, project_dir)
+            requirements = self._read_requirements(project_dir / "requirements.txt")
+            goal = str(context.get("goal", task.description)).strip()
 
-        docstrings_md = self._build_docstrings_markdown(doc_summaries)
-        endpoints_md = self._build_endpoints_markdown(endpoints)
-        requirements_md = self._build_requirements_markdown(requirements)
+            readme_content = self._build_readme(
+                project_slug=project_slug,
+                goal=goal,
+                py_files=py_files,
+                doc_summaries=doc_summaries,
+                endpoints=endpoints,
+                requirements=requirements,
+                project_dir=project_dir,
+            )
 
-        (docs_dir / "README.md").write_text(readme_content, encoding="utf-8")
-        (docs_dir / "python_docstrings.md").write_text(docstrings_md, encoding="utf-8")
-        (docs_dir / "api_endpoints.md").write_text(endpoints_md, encoding="utf-8")
-        (docs_dir / "dependencies.md").write_text(requirements_md, encoding="utf-8")
+            docstrings_md = self._build_docstrings_markdown(doc_summaries)
+            endpoints_md = self._build_endpoints_markdown(endpoints)
+            requirements_md = self._build_requirements_markdown(requirements)
 
-        return AgentResponse(
-            success=True,
-            content={
-                "readme_content": readme_content,
-                "docs_dir": str(docs_dir),
-                "py_file_count": len(py_files),
-                "endpoint_count": len(endpoints),
-                "requirements_count": len(requirements),
-                "files_written": [
-                    str(docs_dir / "README.md"),
-                    str(docs_dir / "python_docstrings.md"),
-                    str(docs_dir / "api_endpoints.md"),
-                    str(docs_dir / "dependencies.md"),
-                ],
-            },
-            metadata={"readme_lines": len(readme_content.splitlines())},
-        )
+            # Write to both project root and docs/
+            (project_dir / "README.md").write_text(readme_content, encoding="utf-8")
+            (docs_dir / "README.md").write_text(readme_content, encoding="utf-8")
+            (docs_dir / "python_docstrings.md").write_text(docstrings_md, encoding="utf-8")
+            (docs_dir / "api_endpoints.md").write_text(endpoints_md, encoding="utf-8")
+            (docs_dir / "dependencies.md").write_text(requirements_md, encoding="utf-8")
+
+            return AgentResponse(
+                success=True,
+                content={
+                    "readme_content": readme_content,
+                    "docs_dir": str(docs_dir),
+                    "py_file_count": len(py_files),
+                    "endpoint_count": len(endpoints),
+                    "requirements_count": len(requirements),
+                    "files_written": [
+                        str(project_dir / "README.md"),
+                        str(docs_dir / "README.md"),
+                        str(docs_dir / "python_docstrings.md"),
+                        str(docs_dir / "api_endpoints.md"),
+                        str(docs_dir / "dependencies.md"),
+                    ],
+                },
+                metadata={"readme_lines": len(readme_content.splitlines())},
+            )
+        except Exception as e:
+            return AgentResponse(
+                success=False,
+                content={"error": str(e), "project_slug": project_slug},
+                metadata={"stage": "docs_generation"},
+            )
 
     @staticmethod
     def _collect_python_files(project_dir: Path) -> list[Path]:
@@ -242,11 +253,17 @@ class DocsAgent(BaseAgent):
         project_dir: Path,
     ) -> str:
         usage_cmd = self._detect_usage_command(project_dir)
+        structure_tree = self._build_structure_tree(project_dir)
         lines = [
             f"# {project_slug}",
             "",
             "## Proje Aciklamasi",
             goal if goal else "Bu proje multi-agent pipeline tarafindan olusturuldu.",
+            "",
+            "## Proje Yapisi",
+            "```",
+            structure_tree,
+            "```",
             "",
             "## Kurulum",
             "```bash",
@@ -303,6 +320,31 @@ class DocsAgent(BaseAgent):
                 "",
             ]
         )
+        return "\n".join(lines)
+
+    @staticmethod
+    def _build_structure_tree(project_dir: Path, max_depth: int = 3) -> str:
+        """Generate a directory tree string for the project."""
+        skip_dirs = {"__pycache__", ".git", "node_modules", ".venv", "venv"}
+        lines: list[str] = [project_dir.name + "/"]
+
+        def _walk(directory: Path, prefix: str, depth: int):
+            if depth > max_depth:
+                return
+            try:
+                entries = sorted(directory.iterdir(), key=lambda x: (x.is_file(), x.name))
+            except PermissionError:
+                return
+            entries = [e for e in entries if e.name not in skip_dirs and not e.name.startswith(".")]
+            for i, entry in enumerate(entries):
+                is_last = i == len(entries) - 1
+                connector = "└── " if is_last else "├── "
+                lines.append(f"{prefix}{connector}{entry.name}")
+                if entry.is_dir():
+                    ext = "    " if is_last else "│   "
+                    _walk(entry, prefix + ext, depth + 1)
+
+        _walk(project_dir, "", 0)
         return "\n".join(lines)
 
     @staticmethod

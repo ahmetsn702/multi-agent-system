@@ -4,10 +4,13 @@ Playwright-based UI testing agent for web projects.
 
 Automatically tests Flask/FastAPI apps and static HTML projects,
 captures screenshots, and reports to CriticAgent.
+Falls back to HTML analysis when Playwright is unavailable.
 """
 import asyncio
 import logging
 import os
+import re
+import socket
 import subprocess
 import time
 from pathlib import Path
@@ -20,7 +23,7 @@ try:
     PLAYWRIGHT_AVAILABLE = True
 except ImportError:
     PLAYWRIGHT_AVAILABLE = False
-    logging.warning("Playwright not installed. UI testing disabled.")
+    logging.warning("Playwright not installed. Falling back to HTML analysis.")
 
 
 class UITesterAgent(BaseAgent):
@@ -71,14 +74,6 @@ class UITesterAgent(BaseAgent):
             f"- Playwright available: {self.playwright_available}"
         )
         
-        if not self.playwright_available:
-            return ThoughtProcess(
-                reasoning="Playwright not installed, skipping UI test",
-                plan=["Skip UI testing"],
-                tool_calls=[],
-                confidence=0.0
-            )
-        
         if not is_web_project:
             return ThoughtProcess(
                 reasoning="Not a web project, skipping UI test",
@@ -86,21 +81,31 @@ class UITesterAgent(BaseAgent):
                 tool_calls=[],
                 confidence=0.0
             )
-        
+
+        if not self.playwright_available and (has_flask or has_fastapi):
+            return ThoughtProcess(
+                reasoning="Playwright not installed and server app detected — need Playwright for server testing",
+                plan=["Skip server UI testing, perform HTML analysis if HTML files exist"],
+                tool_calls=[],
+                confidence=0.4 if has_html else 0.0
+            )
+
         # Determine test strategy
         if has_flask or has_fastapi:
             strategy = "Start server, capture screenshot, stop server"
+        elif has_html and self.playwright_available:
+            strategy = "Open HTML file directly, capture screenshot + analyze HTML"
         elif has_html:
-            strategy = "Open HTML file directly, capture screenshot"
+            strategy = "Analyze HTML structure (no Playwright — fallback mode)"
         else:
             strategy = "Skip (no testable UI)"
-        
+
         return ThoughtProcess(
             reasoning=reasoning,
             plan=[
                 "Detect project type",
                 strategy,
-                "Save screenshot to project folder",
+                "Save results to project folder",
                 "Report to CriticAgent"
             ],
             tool_calls=[],
@@ -109,38 +114,55 @@ class UITesterAgent(BaseAgent):
     
     async def act(self, thought: ThoughtProcess, task: Task) -> AgentResponse:
         """Execute UI testing."""
-        if thought.confidence < 0.5:
+        if thought.confidence < 0.3:
             return AgentResponse(
-                content="UI testing skipped (not a web project or Playwright unavailable)",
+                content="UI testing skipped (not a web project)",
                 success=True,
                 metadata={"skipped": True}
             )
-        
+
         project_dir = Path(task.context.get("project_dir", ""))
         files = task.context.get("files", [])
-        
-        # Create screenshots directory
+
+        # Create screenshots directory (parents=True to avoid FileNotFoundError)
         screenshots_dir = project_dir / "screenshots"
-        screenshots_dir.mkdir(exist_ok=True)
-        
+        screenshots_dir.mkdir(parents=True, exist_ok=True)
+
         screenshot_path = None
-        error_msg = None
-        
+        html_report = None
+
         try:
             # Detect project type
             has_flask = any('flask' in f.lower() or 'app.py' in f for f in files)
             has_fastapi = any('fastapi' in f.lower() or 'main.py' in f for f in files)
             has_html = any(f.endswith('.html') for f in files)
-            
-            if has_flask or has_fastapi:
+
+            if self.playwright_available and (has_flask or has_fastapi):
                 screenshot_path = await self._test_server_app(
                     project_dir, files, screenshots_dir, is_flask=has_flask
                 )
-            elif has_html:
+            elif self.playwright_available and has_html:
                 screenshot_path = await self._test_static_html(
                     project_dir, files, screenshots_dir
                 )
-            
+
+            # Always run HTML analysis if HTML files exist
+            if has_html:
+                html_report = self._analyze_html_files(project_dir, files)
+
+            # Fallback: HTML analysis only (no Playwright)
+            if not self.playwright_available and has_html and html_report:
+                print(f"[UITester] 📄 HTML analysis completed (no Playwright)")
+                return AgentResponse(
+                    content=f"UI analysis completed (fallback mode):\n{self._format_html_report(html_report)}",
+                    success=True,
+                    metadata={
+                        "screenshot_path": None,
+                        "html_report": html_report,
+                        "mode": "fallback_analysis",
+                    }
+                )
+
             if screenshot_path:
                 print(f"[UITester] ✅ Screenshot saved: {screenshot_path}")
                 return AgentResponse(
@@ -148,16 +170,17 @@ class UITesterAgent(BaseAgent):
                     success=True,
                     metadata={
                         "screenshot_path": str(screenshot_path),
-                        "screenshot_exists": screenshot_path.exists()
+                        "screenshot_exists": screenshot_path.exists(),
+                        "html_report": html_report,
                     }
                 )
             else:
                 return AgentResponse(
                     content="UI test completed but no screenshot captured",
                     success=True,
-                    metadata={"screenshot_path": None}
+                    metadata={"screenshot_path": None, "html_report": html_report}
                 )
-                
+
         except Exception as e:
             error_msg = str(e)
             print(f"[UITester] ❌ UI test error: {error_msg}")
@@ -168,7 +191,6 @@ class UITesterAgent(BaseAgent):
                 metadata={"screenshot_path": None}
             )
         finally:
-            # Cleanup: stop server if running
             if self.server_process:
                 self._stop_server()
     
@@ -196,9 +218,9 @@ class UITesterAgent(BaseAgent):
         if not main_file or not main_file.exists():
             print("[UITester] ⚠️  Main file not found, skipping server test")
             return None
-        
-        # Start server
-        port = 5555  # Use non-standard port to avoid conflicts
+
+        # Start server on a dynamically allocated free port
+        port = self._find_free_port()
         if not self._start_server(main_file, port, is_flask):
             return None
         
@@ -233,43 +255,27 @@ class UITesterAgent(BaseAgent):
         files: list,
         screenshots_dir: Path
     ) -> Optional[Path]:
-        """Test static HTML by opening file directly."""
-        # Find HTML file
-        html_file = None
-        for f in files:
-            if f.endswith('.html'):
-                # Prefer index.html or main.html
-                if 'index' in f.lower() or 'main' in f.lower():
-                    html_file = project_dir / "src" / Path(f).name
-                    break
-        
-        # Fallback: any HTML file
+        """Test static HTML by opening file directly with Playwright."""
+        html_file = self._find_html_file(project_dir, files)
         if not html_file:
-            for f in files:
-                if f.endswith('.html'):
-                    html_file = project_dir / "src" / Path(f).name
-                    break
-        
-        if not html_file or not html_file.exists():
             print("[UITester] ⚠️  HTML file not found")
             return None
-        
+
         screenshot_path = screenshots_dir / "page.png"
-        
+
         try:
             async with async_playwright() as p:
                 browser = await p.chromium.launch(headless=True)
                 page = await browser.new_page()
-                
-                # Open file:// URL
+
                 file_url = f"file://{html_file.absolute()}"
                 await page.goto(file_url, timeout=10000)
                 await page.screenshot(path=str(screenshot_path), full_page=True)
-                
+
                 await browser.close()
-                
+
             return screenshot_path
-            
+
         except Exception as e:
             self._log(f"⚠️  Screenshot capture failed: {e}")
             return None
@@ -321,6 +327,118 @@ class UITesterAgent(BaseAgent):
                     pass
             finally:
                 self.server_process = None
+
+    @staticmethod
+    def _find_free_port() -> int:
+        """Find a free TCP port using the OS."""
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("", 0))
+            return s.getsockname()[1]
+
+    def _find_html_file(self, project_dir: Path, files: list) -> Optional[Path]:
+        """Find the best HTML file to test."""
+        html_file = None
+        # Prefer index.html or main.html
+        for f in files:
+            if f.endswith('.html') and ('index' in f.lower() or 'main' in f.lower()):
+                html_file = project_dir / "src" / Path(f).name
+                break
+        # Fallback: any HTML file
+        if not html_file:
+            for f in files:
+                if f.endswith('.html'):
+                    html_file = project_dir / "src" / Path(f).name
+                    break
+        if html_file and html_file.exists():
+            return html_file
+        return None
+
+    def _analyze_html_files(self, project_dir: Path, files: list) -> dict:
+        """Analyze HTML files for quality checks without Playwright."""
+        html_file = self._find_html_file(project_dir, files)
+        if not html_file:
+            return {"error": "No HTML file found"}
+
+        try:
+            content = html_file.read_text(encoding="utf-8", errors="ignore")
+        except Exception as e:
+            return {"error": f"Cannot read {html_file.name}: {e}"}
+
+        issues: list[str] = []
+        checks_passed: list[str] = []
+
+        # Title check
+        title_match = re.search(r'<title>(.*?)</title>', content, re.IGNORECASE | re.DOTALL)
+        if title_match and title_match.group(1).strip():
+            checks_passed.append(f"Title: '{title_match.group(1).strip()}'")
+        else:
+            issues.append("Missing or empty <title> tag")
+
+        # Charset check
+        if re.search(r'<meta[^>]+charset\s*=', content, re.IGNORECASE):
+            checks_passed.append("Charset meta tag present")
+        else:
+            issues.append("Missing charset meta tag")
+
+        # Viewport check
+        if re.search(r'<meta[^>]+name\s*=\s*["\']viewport["\']', content, re.IGNORECASE):
+            checks_passed.append("Viewport meta tag present")
+        else:
+            issues.append("Missing viewport meta tag (not mobile-responsive)")
+
+        # DOCTYPE check
+        if content.strip().lower().startswith("<!doctype"):
+            checks_passed.append("DOCTYPE declaration present")
+        else:
+            issues.append("Missing <!DOCTYPE html> declaration")
+
+        # lang attribute
+        if re.search(r'<html[^>]+lang\s*=', content, re.IGNORECASE):
+            checks_passed.append("HTML lang attribute present")
+        else:
+            issues.append("Missing lang attribute on <html> tag (accessibility)")
+
+        # Image alt attributes
+        imgs = re.findall(r'<img\b([^>]*)>', content, re.IGNORECASE)
+        imgs_without_alt = [i for i in imgs if 'alt=' not in i.lower()]
+        if imgs:
+            if imgs_without_alt:
+                issues.append(f"{len(imgs_without_alt)}/{len(imgs)} <img> tags missing alt attribute")
+            else:
+                checks_passed.append(f"All {len(imgs)} images have alt attributes")
+
+        # Broken href="#" links
+        hash_links = re.findall(r'href\s*=\s*["\']#["\']', content, re.IGNORECASE)
+        if hash_links:
+            issues.append(f"{len(hash_links)} links with href='#' (placeholder links)")
+
+        return {
+            "file": html_file.name,
+            "checks_passed": checks_passed,
+            "issues": issues,
+            "total_checks": len(checks_passed) + len(issues),
+            "score": len(checks_passed) / max(len(checks_passed) + len(issues), 1),
+        }
+
+    @staticmethod
+    def _format_html_report(report: dict) -> str:
+        """Format HTML analysis report as readable text."""
+        if "error" in report:
+            return f"HTML Analysis Error: {report['error']}"
+
+        lines = [f"HTML Analysis: {report.get('file', '?')}"]
+        lines.append(f"Score: {report['score']:.0%} ({len(report['checks_passed'])} passed, {len(report['issues'])} issues)")
+
+        if report["checks_passed"]:
+            lines.append("\nPassed:")
+            for check in report["checks_passed"]:
+                lines.append(f"  + {check}")
+        if report["issues"]:
+            lines.append("\nIssues:")
+            for issue in report["issues"]:
+                lines.append(f"  - {issue}")
+
+        return "\n".join(lines)
 
     def _log(self, message: str, level: str = "info"):
         """Log message with UITester prefix."""

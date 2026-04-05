@@ -15,7 +15,10 @@ from core.message_bus import MessageBus
 WORKSPACE_DIR = Path(__file__).parent.parent / "workspace"
 PROFILE_PATH = Path(__file__).parent.parent / "user_profile.txt"
 
-SYSTEM_PROMPT = """Sen bir kullanıcı analisti ve profil uzmanısın.
+# Dynamic user name: env > fallback "User"
+USER_NAME = os.environ.get("MAOS_USER_NAME", "User")
+
+SYSTEM_PROMPT_TEMPLATE = """Sen bir kullanıcı analisti ve profil uzmanısın.
 Sana çeşitli oturum logları, proje verileri ve kullanıcı hedefleri verilecek.
 Bu verileri analiz edip kullanıcının:
   - İlgi alanlarını ve proje tercihlerini
@@ -29,12 +32,12 @@ Bu verileri analiz edip kullanıcının:
 KURALLAR:
 1. Her bölüm net başlık ve madde işareti ile olmalı.
 2. Spekülasyon yapma, sadece veride gördüklerini yaz.
-3. Kullanıcıya hitap et — "Ahmet" veya "Kullanıcı" diye.
+3. Kullanıcıya hitap et — "{user_name}" diye.
 4. Türkçe yaz.
 
 ÇIKTI — YALNIZCA BU JSON:
-{
-  "name": "Ahmet",
+{{
+  "name": "{user_name}",
   "technical_level": "orta / ileri",
   "interests": ["konu1", "konu2"],
   "preferred_languages": ["Python"],
@@ -42,10 +45,10 @@ KURALLAR:
   "project_patterns": "kısa açıklamayla nasıl çalıştığı",
   "strengths": ["güçlü alan 1"],
   "growth_areas": ["gelişim alanı 1"],
-  "project_history": [{"name": "proje", "complexity": "yüksek", "date": "tarih"}],
+  "project_history": [{{"name": "proje", "complexity": "yüksek", "date": "tarih"}}],
   "recommendations": ["öneri 1", "öneri 2"],
   "summary": "2-3 cümlelik genel değerlendirme"
-}"""
+}}"""
 
 
 class ProfilerAgent(BaseAgent):
@@ -98,16 +101,35 @@ class ProfilerAgent(BaseAgent):
                 except Exception:
                     pass
 
-            # Collect src file names (coding patterns)
+            # Collect src file names + stats (coding patterns)
             src_files = list((project_dir / "src").glob("*.py")) if (project_dir / "src").exists() else []
             test_files = list((project_dir / "tests").glob("*.py")) if (project_dir / "tests").exists() else []
             if src_files or test_files:
+                total_lines = 0
+                languages = set()
+                for f in src_files + test_files:
+                    try:
+                        total_lines += len(f.read_text(encoding="utf-8", errors="ignore").splitlines())
+                    except Exception:
+                        pass
+                # Detect non-Python languages
+                for ext_glob, lang in [("*.js", "JavaScript"), ("*.ts", "TypeScript"),
+                                        ("*.html", "HTML"), ("*.css", "CSS")]:
+                    for base in (project_dir / "src", project_dir):
+                        if base.exists() and list(base.glob(ext_glob)):
+                            languages.add(lang)
+                if src_files:
+                    languages.add("Python")
+
                 sessions.append({
                     "project": project_dir.name,
                     "type": "files",
                     "data": {
                         "src": [f.name for f in src_files],
                         "tests": [f.name for f in test_files],
+                        "total_lines": total_lines,
+                        "languages": sorted(languages),
+                        "has_tests": len(test_files) > 0,
                     }
                 })
 
@@ -147,10 +169,16 @@ class ProfilerAgent(BaseAgent):
             elif s["type"] == "files":
                 src = s["data"].get("src", [])
                 tests = s["data"].get("tests", [])
+                total_lines = s["data"].get("total_lines", 0)
+                languages = s["data"].get("languages", [])
                 if src:
                     lines.append(f"  Kaynak dosyalar: {', '.join(src)}")
                 if tests:
                     lines.append(f"  Test dosyaları: {', '.join(tests)}")
+                if total_lines:
+                    lines.append(f"  Toplam satır: {total_lines}")
+                if languages:
+                    lines.append(f"  Diller: {', '.join(languages)}")
 
         if not lines:
             lines.append("Henüz kaydedilmiş proje verisi bulunamadı.")
@@ -166,7 +194,7 @@ class ProfilerAgent(BaseAgent):
             f"       Oluşturulma: {now}",
             "=" * 72,
             "",
-            f"  İsim          : {parsed.get('name', 'Ahmet')}",
+            f"  İsim          : {parsed.get('name', USER_NAME)}",
             f"  Teknik Seviye : {parsed.get('technical_level', '-')}",
             "",
         ]
@@ -230,51 +258,91 @@ class ProfilerAgent(BaseAgent):
             confidence=0.95,
         )
 
+    def _build_fallback_profile(self, sessions: list[dict]) -> dict:
+        """Build a basic profile from raw data when LLM parse fails."""
+        project_names = [s["project"] for s in sessions if s["type"] == "plan"]
+        all_languages: set[str] = set()
+        total_lines = 0
+        for s in sessions:
+            if s["type"] == "files":
+                all_languages.update(s["data"].get("languages", []))
+                total_lines += s["data"].get("total_lines", 0)
+
+        return {
+            "name": USER_NAME,
+            "technical_level": "belirlenemedi",
+            "interests": project_names[:5],
+            "preferred_languages": sorted(all_languages) or ["Python"],
+            "preferred_tools": [],
+            "project_patterns": f"{len(project_names)} proje, toplam {total_lines} satır kod",
+            "strengths": [],
+            "growth_areas": [],
+            "project_history": [
+                {"name": name, "complexity": "orta", "date": "2026"}
+                for name in project_names
+            ],
+            "recommendations": [],
+            "summary": f"LLM analizi başarısız oldu. {len(project_names)} proje veriden temel profil oluşturuldu.",
+        }
+
     async def act(self, thought: ThoughtProcess, task: Task) -> AgentResponse:
         """Collect data, analyze with LLM, write user_profile.txt."""
-        sessions = self._collect_session_data()
-        context_text = self._build_context_text(sessions)
+        try:
+            sessions = self._collect_session_data()
+            context_text = self._build_context_text(sessions)
 
-        prompt = (
-            "Aşağıdaki multi-agent sistem oturum verileri bir kullanıcıya ait.\n"
-            "Bu verileri analiz ederek kullanıcının profilini çıkar.\n\n"
-            f"VERİ:\n{context_text}\n\n"
-            "Kullanıcı adı büyük ihtimalle Ahmet. "
-            "Proje isimlerinden ve hedeflerinden ilgi alanlarını, "
-            "teknik seviyesini ve çalışma tercihlerini çıkar."
-        )
+            prompt = (
+                "Aşağıdaki multi-agent sistem oturum verileri bir kullanıcıya ait.\n"
+                "Bu verileri analiz ederek kullanıcının profilini çıkar.\n\n"
+                f"VERİ:\n{context_text}\n\n"
+                f"Kullanıcı adı: {USER_NAME}. "
+                "Proje isimlerinden ve hedeflerinden ilgi alanlarını, "
+                "teknik seviyesini ve çalışma tercihlerini çıkar."
+            )
 
-        response = await self._call_llm(
-            messages=[{"role": "user", "content": prompt}],
-            system_prompt=SYSTEM_PROMPT,
-            temperature=0.4,
-            max_tokens=1500,
-        )
+            system_prompt = SYSTEM_PROMPT_TEMPLATE.format(user_name=USER_NAME)
 
-        parsed = self._parse_json_response(response)
+            response = await self._call_llm(
+                messages=[{"role": "user", "content": prompt}],
+                system_prompt=system_prompt,
+                temperature=0.4,
+                max_tokens=1500,
+            )
 
-        # Enrich project history from actual workspace data
-        if not parsed.get("project_history"):
-            parsed["project_history"] = [
-                {"name": s["project"], "complexity": "orta", "date": "2026"}
-                for s in sessions if s["type"] == "plan"
-            ]
+            parsed = self._parse_json_response(response)
 
-        profile_txt = self._format_profile_txt(parsed)
+            # Fallback if LLM response couldn't be parsed
+            if not parsed:
+                parsed = self._build_fallback_profile(sessions)
 
-        # Save to disk
-        PROFILE_PATH.write_text(profile_txt, encoding="utf-8")
+            # Enrich project history from actual workspace data
+            if not parsed.get("project_history"):
+                parsed["project_history"] = [
+                    {"name": s["project"], "complexity": "orta", "date": "2026"}
+                    for s in sessions if s["type"] == "plan"
+                ]
 
-        return AgentResponse(
-            content={
-                "profile": parsed,
-                "profile_txt": profile_txt,
-                "saved_to": str(PROFILE_PATH),
-                "sessions_analyzed": len(sessions),
-            },
-            success=True,
-            metadata={"profile_path": str(PROFILE_PATH)},
-        )
+            profile_txt = self._format_profile_txt(parsed)
+
+            # Save to disk
+            PROFILE_PATH.write_text(profile_txt, encoding="utf-8")
+
+            return AgentResponse(
+                content={
+                    "profile": parsed,
+                    "profile_txt": profile_txt,
+                    "saved_to": str(PROFILE_PATH),
+                    "sessions_analyzed": len(sessions),
+                },
+                success=True,
+                metadata={"profile_path": str(PROFILE_PATH)},
+            )
+        except Exception as e:
+            return AgentResponse(
+                success=False,
+                content={"error": str(e)},
+                metadata={"stage": "profiler"},
+            )
 
     # ──────────────────────────────────────────────
     # Convenience: run directly without a task

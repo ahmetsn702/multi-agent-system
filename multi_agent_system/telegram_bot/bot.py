@@ -32,6 +32,16 @@ logger = logging.getLogger(__name__)
 SYSTEM_ROOT = Path(__file__).parent.parent
 
 
+def _safe_slug(slug: str) -> str:
+    """Sanitize project slug to prevent path traversal."""
+    import re
+    # Remove path separators and traversal patterns
+    cleaned = slug.replace("..", "").replace("/", "").replace("\\", "")
+    # Only allow alphanumeric, hyphens, underscores
+    cleaned = re.sub(r"[^a-zA-Z0-9_\-]", "", cleaned)
+    return cleaned or "invalid-slug"
+
+
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Bot başlatma komutu."""
     user_id = update.effective_user.id
@@ -233,10 +243,10 @@ async def build_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Adım 1: MAOS ile proje kodu üret
         result = await run_goal_async(goal, log_callback=log_callback)
-        project_slug = result.get("project_slug", "")
+        project_slug = _safe_slug(result.get("project_slug", ""))
         cost = result.get("cost_usd", 0)
 
-        if not project_slug:
+        if not project_slug or project_slug == "invalid-slug":
             await status_msg.edit_text(
                 f"❌ Proje üretilemedi.\n\n{str(result)[:200]}"
             )
@@ -281,7 +291,21 @@ async def build_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "project_slug": project_slug,
             },
         )
-        build_response = await builder.run(build_task)
+        try:
+            build_response = await asyncio.wait_for(builder.run(build_task), timeout=300)
+        except asyncio.TimeoutError:
+            await status_msg.edit_text(
+                f"⚠️ Build zaman asimi (5 dk) — ZIP gonderiliyor\n\n"
+                f"📋 Hedef: {goal[:60]}\n"
+                f"💰 Maliyet: ${cost:.4f}"
+            )
+            zip_buffer = _create_zip(project_path)
+            await update.message.reply_document(
+                document=zip_buffer,
+                filename=f"{project_slug[:30]}.zip",
+                caption="📦 Proje kaynak kodu (build zaman asimina ugradi)"
+            )
+            return
 
         # Adım 3: APK'yı bul ve gönder
         apk_path = _find_apk(project_path)
@@ -405,7 +429,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         result = await run_goal_async(goal, log_callback=log_callback)
         
         # Sonuç mesajı
-        project_slug = result.get("project_slug", "")
+        project_slug = _safe_slug(result.get("project_slug", ""))
         cost = result.get("cost_usd", 0)
         tasks_done = result.get("tasks_completed", 0)
         files_created = len(result.get("task_details", []))

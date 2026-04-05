@@ -26,6 +26,9 @@ def _is_safe(command: str) -> bool:
     for blocked in BLOCKED_PATTERNS:
         if blocked in lower:
             return False
+    # Allowlist check: command must start with a known prefix
+    if not any(lower.startswith(prefix) for prefix in ALLOWED_PREFIXES):
+        return False
     return True
 
 

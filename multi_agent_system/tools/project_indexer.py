@@ -38,7 +38,7 @@ def index_project(project_path: str) -> dict:
         except PermissionError:
             return
         for i, entry in enumerate(entries):
-            if should_skip(entry):
+            if should_skip(entry) or entry.is_symlink():
                 continue
             connector = "└── " if i == len(entries) - 1 else "├── "
             structure_lines.append(f"{prefix}{connector}{entry.name}")

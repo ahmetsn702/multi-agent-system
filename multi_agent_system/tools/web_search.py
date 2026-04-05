@@ -27,34 +27,38 @@ def _load_cache(query: str) -> Optional[list[dict]]:
     from datetime import datetime, timezone
     cache_stats["total_queries"] += 1
     path = _cache_path(query)
-    
-    if os.path.exists(path):
-        try:
-            with open(path, "r+", encoding="utf-8") as f:
-                data = json.load(f)
-                
-                # Support both old and new formats
-                if "cached_at" in data:
-                    timestamp_sec = data["cached_at"]
-                else:
-                    isoformat_str = data.get("timestamp", datetime.now(timezone.utc).isoformat())
-                    try:
-                        dt = datetime.fromisoformat(isoformat_str.replace("Z", "+00:00"))
-                        timestamp_sec = dt.timestamp()
-                    except ValueError:
-                        timestamp_sec = time.time()
-                
-                if time.time() - timestamp_sec < CACHE_TTL:
-                    # Update hit count
-                    data["hit_count"] = data.get("hit_count", 0) + 1
-                    f.seek(0)
-                    json.dump(data, f)
-                    f.truncate()
-                    
-                    cache_stats["hits"] += 1
-                    return data.get("results", [])
-        except Exception:
-            pass
+
+    if not os.path.exists(path):
+        return None
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        # Support both old and new formats
+        if "cached_at" in data:
+            timestamp_sec = data["cached_at"]
+        else:
+            isoformat_str = data.get("timestamp", datetime.now(timezone.utc).isoformat())
+            try:
+                dt = datetime.fromisoformat(isoformat_str.replace("Z", "+00:00"))
+                timestamp_sec = dt.timestamp()
+            except ValueError:
+                timestamp_sec = time.time()
+
+        if time.time() - timestamp_sec < CACHE_TTL:
+            # Update hit count in a separate write to avoid r+ corruption
+            data["hit_count"] = data.get("hit_count", 0) + 1
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False)
+            except Exception:
+                pass  # Hit count update is non-critical
+
+            cache_stats["hits"] += 1
+            return data.get("results", [])
+    except Exception:
+        pass
     return None
 
 

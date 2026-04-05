@@ -795,178 +795,272 @@ class CoderAgent(BaseAgent):
 
 
 
+    def _build_coding_prompt(self, task: Task, context: str) -> str:
+        """Build the coding prompt with phase, contract, and existing file notes."""
+        phase_info = task.context.get("phase_info", "")
+        file_api = task.context.get("file_api", "")
+        existing_files = task.context.get("existing_files", "")
+
+        phase_note = ""
+        if phase_info or file_api:
+            phase_note = f"\n\n{'='*60}\n"
+            phase_note += "KRITIK: MEVCUT DOSYALAR — TEKRAR YAZMA!\n"
+            if file_api:
+                phase_note += f"\nMevcut dosya API'leri (SADECE IMPORT ET):\n{file_api}\n"
+            if phase_info:
+                phase_note += f"\n{phase_info}\n"
+            phase_note += (
+                "\nKURAL: Yukaridaki dosyalari ASLA yeniden olusturma!\n"
+                "Sadece 'from dosya_adi import SinifAdi' ile import et.\n"
+                "SADECE YENI dosyalar olustur.\n"
+                f"{'='*60}"
+            )
+        elif existing_files:
+            phase_note = f"\n\nMevcut dosyalar (import et, tekrar yazma): {existing_files}"
+
+        contract_note = ""
+        contract = task.context.get("project_contract")
+        if contract:
+            contract_summary = self._format_contract_for_prompt(contract)
+            contract_note = f"\n\n{'='*60}\n"
+            contract_note += "PROJECT CONTRACT (FOLLOW EXACTLY):\n\n"
+            contract_note += contract_summary
+            contract_note += "\n\nIMPORTANT: Follow the contract exactly. Use the defined field names, types, and interfaces.\n"
+            contract_note += f"{'='*60}\n"
+
+        return (
+            "CEVABINA [FILE: ile basla, baska hicbir seyle baslama.\n"
+            "JSON KULLANMA. {\"code\": YAZMA. SADECE [FILE:dosya.py]...[/FILE].\n\n"
+            f"Gorev: {task.description}"
+            f"{phase_note}\n"
+            f"{contract_note}\n"
+            f"Baglam/Arastirma: {context}\n\n"
+            "KESIN KURAL: Kod uretirken SADECE [FILE:dosya.py]...[/FILE] formatini kullan. "
+            "JSON formati YASAK. {\"code\": ...} YASAK. Sadece [FILE:] blogu.\n\n"
+            "ZORUNLU FORMAT - BUNU KULLANMAZSAN CEVAP GECERSIZ:\n"
+            "[FILE:dosyaadi.py]\n"
+            "# tam Python kodu buraya\n"
+            "[/FILE]\n\n"
+            "KURALLAR:\n"
+            "1. Her dosya icin ayri [FILE:isim.py]...[/FILE] blogu yaz\n"
+            "2. Kodu ASLA yarim birakma, her fonksiyon eksiksiz olmali\n"
+            "3. [/FILE] kapanis tagini ASLA unutma\n"
+            "4. Markdown kod blogu (```python) KULLANMA\n"
+            "5. Aciklama/yorum yazma, sadece kod yaz\n"
+            "6. Mevcut dosyalari TEKRAR YAZMA, sadece IMPORT ET\n\n"
+            "Simdi gorevi cozen TAM ve EKSIKSIZ kodu yaz:"
+        )
+
+    async def _generate_file_blocks(self, messages: list, task: Task) -> list[dict]:
+        """Call LLM, extract file blocks, retry if needed. Returns file_blocks or empty list."""
+        response = await self._call_llm(
+            messages=messages,
+            system_prompt=SYSTEM_PROMPT,
+            temperature=0.5,
+            max_tokens=16000,
+        )
+
+        token_estimate = len(str(response).split()) if response else 0
+        print(f"[CODER RAW] out tokens: ~{token_estimate}, content: {repr(str(response)[:200])}")
+
+        if token_estimate < 50:
+            print(f"[CODER CRITICAL] Response is only {token_estimate} tokens! Full: {repr(response)}")
+
+        print(f"[Coder DEBUG] Raw output first 800 chars:")
+        print(f"---RAW START---\n{response[:800]}\n---RAW END--- (total {len(response)} chars)")
+
+        file_blocks = self._extract_file_blocks(response, task_hint=task.description)
+        print(f"[Coder DEBUG] Extracted {len(file_blocks)} file blocks")
+
+        if file_blocks:
+            return file_blocks
+
+        # Retry with explicit format instruction
+        print(f"[Coder] [FILE:] block not found, retrying...")
+        retry_prompt = (
+            "ONCEKI CEVABINDA JSON KULLANDIN. BU GECERSIZ.\n"
+            "SADECE [FILE:dosya.py] formatinda yaz.\n"
+            "KESIN KURAL: Kod uretirken SADECE [FILE:dosya.py]...[/FILE] formatini kullan.\n"
+            "JSON formati YASAK. {\"code\": ...} YASAK. Sadece [FILE:] blogu.\n"
+            "CEVABINA [FILE: ile basla, baska hicbir seyle baslama.\n"
+            "SADECE su formati kullan:\n\n"
+            "[FILE:dosya_adi.py]\n# Python kodu buraya\n[/FILE]\n\n"
+            "Lutfen kodu bastan, EKSIKSIZ sekilde ve SADECE bu formatta yaz."
+        )
+        response2 = await self._call_llm(
+            messages=[{"role": "user", "content": retry_prompt}],
+            system_prompt=SYSTEM_PROMPT,
+            temperature=0.3,
+            max_tokens=16000,
+        )
+        file_blocks = self._extract_file_blocks(response2, task_hint=task.description)
+        print(f"[Coder DEBUG] Retry extracted {len(file_blocks)} file blocks")
+
+        if file_blocks:
+            return file_blocks
+
+        # Last resort: if response has code but no [FILE:] markers
+        if response2.strip():
+            is_json = response2.strip().startswith("{") or response2.strip().startswith("[{")
+            has_code = any(kw in response2 for kw in ("def ", "import ", "class ", "if __name__"))
+            if not is_json and has_code:
+                print("[Coder] WARNING: No [FILE:] format, saving raw code as main.py")
+                return [{"filename": "main.py", "content": response2}]
+
+        return []  # Complete failure
+
+    async def _repair_and_validate_code(self, content: str, clean_filename: str) -> tuple[str, bool]:
+        """Handle truncation repair, auto-fix, and syntax validation for a Python file.
+
+        Returns (validated_content, is_valid).
+        """
+        # 0. Truncation repair
+        trunc_retries = 0
+        while self._is_truncated(content) and trunc_retries < 5:
+            trunc_retries += 1
+            print(f"[Coder] Code truncated: {clean_filename}, requesting continuation ({trunc_retries}/5)")
+
+            last_chars = content[-250:]
+            append_prompt = (
+                f"Onceki yazdigin kod '{clean_filename}' dosyasi icin su satirda kesildi:\n"
+                f"...\n{last_chars}\n\n"
+                f"Lutfen SADECE KALAN KISMINI yazmaya devam et.\n"
+                f"FORMAT:\n[FILE:{clean_filename}]\nkalan_kod_buraya\n[/FILE]"
+            )
+
+            chunk_retries = 0
+            chunk_is_valid = False
+            appended = ""
+
+            while chunk_retries < 2 and not chunk_is_valid:
+                chunk_retries += 1
+                try:
+                    response_append = await self._call_llm(
+                        messages=[{"role": "user", "content": append_prompt}],
+                        system_prompt=SYSTEM_PROMPT,
+                        temperature=0.2,
+                        max_tokens=8000,
+                    )
+
+                    append_blocks = self._extract_file_blocks(response_append)
+                    if append_blocks:
+                        appended = append_blocks[0].get("content", "")
+                    else:
+                        raw = response_append.strip()
+                        if raw.startswith("```"):
+                            lines = raw.split("\n")
+                            if len(lines) > 2:
+                                raw = "\n".join(lines[1:-1])
+                        appended = raw
+
+                    from utils.code_utils import align_and_validate_chunk
+                    is_valid, new_combined, error_msg = align_and_validate_chunk(content, appended)
+
+                    if is_valid:
+                        content = new_combined
+                        chunk_is_valid = True
+                        print(f"[Coder] Continuation appended (+{len(appended)} chars)")
+                    else:
+                        print(f"[Coder] Alignment error ({chunk_retries}/2): {error_msg}")
+                except Exception as e:
+                    print(f"[Coder] Continuation error: {e}")
+                    if chunk_retries >= 2:
+                        break
+
+            if not chunk_is_valid:
+                print("[Coder] Max chunk retry reached, appending raw.")
+                content += "\n" + appended
+                break
+
+        # 1. Auto-fix common errors
+        original_content = content
+        content = self._auto_fix_common_errors(content)
+
+        # 2. Fix unterminated strings
+        content = self._fix_unterminated_strings(content)
+
+        if content != original_content:
+            print(f"[Coder] Auto-fix applied: {clean_filename}")
+
+        # 3. Syntax check
+        is_valid, syntax_error = self._check_syntax(content, clean_filename)
+        if is_valid:
+            return content, True
+
+        print(f"[Coder] Syntax error in {clean_filename}: {syntax_error}")
+
+        # 4. LLM-based syntax fix (max 2 attempts)
+        for attempt in range(2):
+            print(f"[Coder] Syntax fix attempt {attempt + 1}/2")
+            import re
+            error_line = "unknown"
+            match = re.search(r'line (\d+)', syntax_error, re.IGNORECASE)
+            if match:
+                error_line = match.group(1)
+
+            fix_prompt = (
+                f"ONCEKI CIKTIN HATALIYDI: {syntax_error}\n\n"
+                f"Hatali satir: {error_line}\n\n"
+                f"Hatali kod:\n```python\n{content}\n```\n\n"
+                f"Simdi SADECE duzeltilmis kodu yaz (markdown formatinda DEGIL):"
+            )
+
+            try:
+                fixed_code = await self._call_llm(
+                    messages=[{"role": "user", "content": fix_prompt}],
+                    system_prompt="Sen bir Python syntax duzeltme uzmanisin. Sadece duzeltilmis kodu dondur.",
+                    temperature=0.1,
+                    max_tokens=6000,
+                )
+
+                if fixed_code.strip().startswith("```"):
+                    lines = fixed_code.strip().split("\n")
+                    fixed_code = "\n".join(lines[1:-1])
+
+                fixed_code = self._auto_fix_common_errors(fixed_code)
+                is_valid_fixed, _ = self._check_syntax(fixed_code, clean_filename)
+                if is_valid_fixed:
+                    print(f"[Coder] Syntax error fixed!")
+                    return fixed_code, True
+                else:
+                    print(f"[Coder] Fix attempt failed")
+            except Exception as e:
+                print(f"[Coder] Fix error: {e}")
+
+        return content, False
+
     async def act(self, thought: ThoughtProcess, task: Task) -> AgentResponse:
         """Generate code using marker-based format, save files to workspace."""
         print("[CODER ACT] starting act()")
-        print(f"[CODER ACT] thought: {thought}")
-        
+
         context = task.context.get("research", "")
         history = self.short_term_memory.get_messages()
         project_slug = task.context.get("project_slug", "default")
+        existing_files = task.context.get("existing_files", "")
 
-        # Cluster mode: Model override varsa kullan
+        # Cluster mode: Model override
         model_override = task.context.get("model_override")
         original_llm = None
         if model_override:
             from core.llm_client import LLMClient
             original_llm = self._llm
             self._llm = LLMClient(agent_id=self.agent_id, model_key=model_override)
-            print(f"[Coder] Cluster mode: {model_override} kullanılıyor")
+            print(f"[Coder] Cluster mode: {model_override}")
 
         try:
-            # Phase context — injected by orchestrator for phased projects
-            phase_info = task.context.get("phase_info", "")
-            file_api = task.context.get("file_api", "")
-            existing_files = task.context.get("existing_files", "")
-
-            phase_note = ""
-            if phase_info or file_api:
-                phase_note = f"\n\n{'='*60}\n"
-                phase_note += "⚠️ KRİTİK: MEVCUT DOSYALAR — TEKRAR YAZMA!\n"
-                if file_api:
-                    phase_note += f"\nMevcut dosya API'leri (SADECE IMPORT ET):\n{file_api}\n"
-                if phase_info:
-                    phase_note += f"\n{phase_info}\n"
-                phase_note += (
-                    "\nKURAL: Yukarıdaki dosyaları ASLA yeniden oluşturma!\n"
-                    "Sadece 'from dosya_adi import SinifAdi' ile import et.\n"
-                    "SADECE YENİ dosyalar oluştur.\n"
-                    f"{'='*60}"
-                )
-            elif existing_files:
-                phase_note = f"\n\nMevcut dosyalar (import et, tekrar yazma): {existing_files}"
-
-            # NEW: Check for contract in context
-            contract_note = ""
-            contract = task.context.get("project_contract")
-            if contract:
-                # Build contract summary for prompt
-                contract_summary = self._format_contract_for_prompt(contract)
-                contract_note = f"\n\n{'='*60}\n"
-                contract_note += "📋 PROJECT CONTRACT (FOLLOW EXACTLY):\n\n"
-                contract_note += contract_summary
-                contract_note += "\n\nIMPORTANT: Follow the contract exactly. Use the defined field names, types, and interfaces.\n"
-                contract_note += f"{'='*60}\n"
-
-            coding_prompt = (
-                "CEVABINA [FILE: ile başla, başka hiçbir şeyle başlama.\n"
-                "JSON KULLANMA. {\"code\": YAZMA. SADECE [FILE:dosya.py]...[/FILE].\n\n"
-                f"Gorev: {task.description}"
-                f"{phase_note}\n"
-                f"{contract_note}\n"
-                f"Baglam/Arastirma: {context}\n\n"
-                "KESİN KURAL: Kod üretirken SADECE [FILE:dosya.py]...[/FILE] formatını kullan. "
-                "JSON formatı YASAK. {\"code\": ...} YASAK. Sadece [FILE:] bloğu.\n\n"
-                "ZORUNLU FORMAT - BUNU KULLANMAZSAN CEVAP GEÇERSİZ:\n"
-                "[FILE:dosyaadi.py]\n"
-                "# tam Python kodu buraya\n"
-                "[/FILE]\n\n"
-                "KURALLAR:\n"
-                "1. Her dosya için ayrı [FILE:isim.py]...[/FILE] bloğu yaz\n"
-                "2. Kodu ASLA yarım bırakma, her fonksiyon eksiksiz olmalı\n"
-                "3. [/FILE] kapanış tagını ASLA unutma\n"
-                "4. Markdown kod bloğu (```python) KULLANMA\n"
-                "5. Açıklama/yorum yazma, sadece kod yaz\n"
-                "6. Mevcut dosyaları TEKRAR YAZMA, sadece IMPORT ET\n\n"
-                "Şimdi görevi çözen TAM ve EKSİKSİZ kodu yaz:"
-            )
-
-
+            coding_prompt = self._build_coding_prompt(task, context)
             messages = history + [{"role": "user", "content": coding_prompt}]
 
             print("[CODER ACT] calling LLM")
-            response = await self._call_llm(
-                messages=messages,
-                system_prompt=SYSTEM_PROMPT,
-                temperature=0.5,
-                max_tokens=16000,  # Codestral 256K destekliyor
-            )
+            file_blocks = await self._generate_file_blocks(messages, task)
 
-            # DEBUG: Token count and raw content inspection
-            import json
-            raw_text = getattr(response, 'text', None) or getattr(response, 'content', None) or response
-            token_estimate = len(str(raw_text).split()) if raw_text else 0
-            print(f"[CODER RAW] out tokens: ~{token_estimate}, content: {repr(str(raw_text)[:200]) if raw_text else 'NONE'}")
-            
-            # CRITICAL DEBUG: If response is very short (35-40 tokens), log everything
-            if token_estimate < 50:
-                print(f"[CODER CRITICAL] Response is only {token_estimate} tokens!")
-                print(f"[CODER CRITICAL] Full raw response: {repr(response)}")
-                print(f"[CODER CRITICAL] Response type: {type(response)}")
-                print(f"[CODER CRITICAL] Response length: {len(response)} chars")
-
-            # DEBUG: Ham LLM çıktısını göster (parser sorunlarını tespit için)
-            print(f"[Coder DEBUG] Ham çıktı ilk 800 karakter:")
-            print(f"---RAW START---")
-            print(response[:800])
-            print(f"---RAW END--- (toplam {len(response)} karakter)")
-            
-            # DEBUG: Log full response when it's suspiciously short
-            if len(response) < 100:
-                print(f"[Coder CRITICAL] Response is suspiciously short ({len(response)} chars)!")
-                print(f"[Coder CRITICAL] Full response: {repr(response)}")
-
-            # Primary: extract [FILE:...][/FILE] blocks (immune to JSON errors)
-            file_blocks = self._extract_file_blocks(response, task_hint=task.description)
-            
-            # DEBUG: Log extraction result
-            print(f"[Coder DEBUG] Extracted {len(file_blocks)} file blocks from response")
             if not file_blocks:
-                print(f"[Coder DEBUG] No file blocks found! Response starts with: {response[:100]}")
-
-            # Eger hicbir [FILE:...] blogu bulunamadiysa RETRY yap -- JSON/metin dosyaya yazilmasin!
-            if not file_blocks:
-                print(f"[Coder] ⚠️ [FILE:] bloğu bulunamadı, fallback tetikleniyor...")
-                print(f"[Coder] ⚠️ Original response was {len(response)} chars, starting with: {response[:150]}")
-                
-                retry_prompt = (
-                    "ÖNCEKİ CEVABINDA JSON KULLANDIN. BU GEÇERSİZ.\n"
-                    "SADECE [FILE:dosya.py] formatında yaz.\n"
-                    "KRITIK HATA: Önceki çıktın [FILE:] formatında değildi!\n\n"
-                    "KESİN KURAL: Kod üretirken SADECE [FILE:dosya.py]...[/FILE] formatını kullan.\n"
-                    "JSON formatı YASAK. {\"code\": ...} YASAK. Sadece [FILE:] bloğu.\n"
-                    "CEVABINA [FILE: ile başla, başka hiçbir şeyle başlama.\n"
-                    "JSON VEYA MARKDOWN KULLANMAK KESİNLİKLE YASAKTIR.\n"
-                    "SADECE şu formatı kullan:\n\n"
-                    "[FILE:dosya_adi.py]\n"
-                    "# Python kodu buraya\n"
-                    "[/FILE]\n\n"
-                    "Lütfen kodu baştan, EKSİKSİZ şekilde ve SADECE bu formatta yaz."
+                return AgentResponse(
+                    content=None,
+                    success=False,
+                    error="LLM [FILE:] formatinda kod uretemedi.",
+                    metadata={"response_length": 0},
                 )
-                print(f"[Coder] ⚠️ [FILE:] bloğu bulunamadı, fallback tetikleniyor...")
-                response2 = await self._call_llm(
-                    messages=[{"role": "user", "content": retry_prompt}],
-                    system_prompt=SYSTEM_PROMPT,
-                    temperature=0.3,
-                    max_tokens=16000,  # retry da aynı limit
-                )
-                file_blocks = self._extract_file_blocks(response2, task_hint=task.description)
-                
-                # DEBUG: Log retry result
-                print(f"[Coder DEBUG] Retry extracted {len(file_blocks)} file blocks")
-                if not file_blocks:
-                    print(f"[Coder DEBUG] Retry also failed! Response2 starts with: {response2[:100]}")
-                    print(f"[Coder DEBUG] Full response2 length: {len(response2)} chars")
-                
-                # Son care: JSON degil ama [FILE:] de yoksa — en azindan kod iceriyorsa yaz
-                if not file_blocks and response2.strip():
-                    is_json = response2.strip().startswith("{") or response2.strip().startswith("[{")
-                    has_code = any(kw in response2 for kw in ("def ", "import ", "class ", "if __name__"))
-                    if not is_json and has_code:
-                        print("[Coder] UYARI: [FILE:] formatı bulunamadı, ham kod main.py olarak kaydediliyor")
-                        file_blocks = [{"filename": "main.py", "content": response2}]
-                    else:
-                        # Hicbir sey bulunamadiysa hata dondur
-                        print("[Coder] KRITIK: Hiçbir geçerli kod bloğu bulunamadı!")
-                        print(f"[Coder] KRITIK: Response length: {len(response)} chars")
-                        print(f"[Coder] KRITIK: Response2 length: {len(response2)} chars")
-                        print(f"[Coder] KRITIK: Response2 full content: {repr(response2)}")
-                        return AgentResponse(
-                            content=None,
-                            success=False,
-                            error="LLM [FILE:] formatında kod üretemedi. Lütfen görevi yeniden deneyin.",
-                            metadata={"raw_response": response2[:500], "response_length": len(response2)},
-                        )
 
             saved_files = []
             run_results = []
@@ -1042,148 +1136,12 @@ class CoderAgent(BaseAgent):
                 # Create any missing intermediate directories
                 save_path.parent.mkdir(parents=True, exist_ok=True)
 
-                # DÜZELTME B: Syntax kontrolü (Python dosyaları için)
+                # Syntax validation (Python files only)
                 if clean_filename.endswith('.py'):
-                    # 0. Truncation (Kesilme) onarimi (Kaldigi yerden devam et)
-                    trunc_retries = 0
-                    while self._is_truncated(content) and trunc_retries < 3:
-                        trunc_retries += 1
-                        print(f"[Coder] ⚠️ Kod yarıda kesildi: {clean_filename}")
-                        print(f"[Coder] 🔄 LLM'den kalan kismı yazması isteniyor... (Deneme: {trunc_retries}/3)")
-                        
-                        last_chars = content[-250:]
-                        append_prompt = (
-                            f"Önceki yazdığın kod '{clean_filename}' dosyası için şu satırda max-token limitine takılarak kesildi:\n"
-                            f"...\n{last_chars}\n\n"
-                            f"Lütfen SADECE KALAN KISMINI yazmaya devam et. Dosyanın başını tekrar YAZMA. "
-                            f"Tam olarak kaldığın o son karakterden sonrasını gönder.\n"
-                            f"FORMAT:\n[FILE:{clean_filename}]\nkalan_kod_buraya\n[/FILE]"
-                        )
-                        
-                        chunk_retries = 0
-                        chunk_is_valid = False
-                        
-                        while chunk_retries < 2 and not chunk_is_valid:
-                            chunk_retries += 1
-                            try:
-                                response_append = await self._call_llm(
-                                    messages=[{"role": "user", "content": append_prompt}],
-                                    system_prompt=SYSTEM_PROMPT,
-                                    temperature=0.2,
-                                    max_tokens=8000,
-                                )
-                                
-                                append_blocks = self._extract_file_blocks(response_append)
-                                if append_blocks:
-                                    appended = append_blocks[0].get("content", "")
-                                else:
-                                    raw = response_append.strip()
-                                    if raw.startswith("```"):
-                                        lines = raw.split("\n")
-                                        if len(lines) > 2:
-                                            raw = "\n".join(lines[1:-1])
-                                    appended = raw
-                                
-                                from utils.code_utils import align_and_validate_chunk
-                                is_valid, new_combined, error_msg = align_and_validate_chunk(content, appended)
-                                
-                                if is_valid:
-                                    content = new_combined
-                                    chunk_is_valid = True
-                                    print(f"[Coder] ✅ Kalan kısım eklendi ve hizalandı (+{len(appended)} karakter)")
-                                else:
-                                    print(f"[Coder] ⚠️ Hizalama hatası ({chunk_retries}/2): {error_msg}. Tekrar deneniyor...")
-                            except Exception as e:
-                                print(f"[Coder] ❌ Kalan kısmı ekleme hatası: {e}")
-                                if chunk_retries >= 2:
-                                    break
-                                    
-                        if not chunk_is_valid:
-                            print("[Coder] ❌ Max chunk retry limitine ulaşıldı, hizalama başarısız, ham kod ekleniyor.")
-                            content += "\n" + appended
-                            break
-                    
-                    # 1. ÖNCE regex ile otomatik düzeltme yap
-                    original_content = content
-                    content = self._auto_fix_common_errors(content)
-                    
-                    # 2. Unterminated string düzeltmeleri
-                    content = self._fix_unterminated_strings(content)
-                    
-                    if content != original_content:
-                        print(f"[Coder] 🔧 Auto-fix uygulandı: {clean_filename}")
-                        # Debug: İlk 200 karakter göster
-                        print(f"[Coder] 🔍 Önce: {original_content[:200]}")
-                        print(f"[Coder] 🔍 Sonra: {content[:200]}")
-                    
-                    # 3. Syntax kontrolü yap
-                    is_valid, syntax_error = self._check_syntax(content, clean_filename)
+                    content, is_valid = await self._repair_and_validate_code(content, clean_filename)
                     if not is_valid:
-                        print(f"[Coder] ❌ Syntax hatası tespit edildi: {clean_filename}")
-                        print(f"[Coder] Hata: {syntax_error}")
-                        
-                        # 3. Max 2 deneme ile LLM'e düzeltmeyi dene
-                        for attempt in range(2):
-                            print(f"[Coder] 🔄 Syntax düzeltme denemesi {attempt + 1}/2")
-                            
-                            # Hata satır numarasını çıkar
-                            error_line = "bilinmiyor"
-                            if "line" in syntax_error.lower():
-                                import re
-                                match = re.search(r'line (\d+)', syntax_error, re.IGNORECASE)
-                                if match:
-                                    error_line = match.group(1)
-                            
-                            fix_prompt = (
-                                f"ÖNCEKİ ÇIKTIN HATALIYDI: {syntax_error}\n\n"
-                                f"KESIN KURALLAR:\n"
-                                f"1. Tüm string'leri kapat: ' ile açtıysan ' ile kapat\n"
-                                f"2. Tüm parantezleri kapat: ( ile açtıysan ) ile kapat\n"
-                                f"3. Tüm f-string'leri kapat: f'{{…}}' formatında\n"
-                                f"4. Kodu ASLA yarım bırakma, tüm fonksiyonları tamamla\n"
-                                f"5. [FILE:dosya.py] formatını kullan\n\n"
-                                f"Önceki hatalı satır: {error_line}\n\n"
-                                f"Hatalı kod:\n```python\n{content}\n```\n\n"
-                                f"Şimdi SADECE düzeltilmiş kodu yaz:\n"
-                                f"- Başında ```python veya ``` OLMASIN\n"
-                                f"- Düz kod döndür, başka hiçbir şey yok\n"
-                                f"- Markdown formatı kullanma!"
-                            )
-                            
-                            try:
-                                fixed_code = await self._call_llm(
-                                    messages=[{"role": "user", "content": fix_prompt}],
-                                    system_prompt="Sen bir Python syntax düzeltme uzmanısın. Sadece düzeltilmiş kodu döndür.",
-                                    temperature=0.1,
-                                    max_tokens=6000,  # 3000 → 6000 (2x artırıldı)
-                                )
-                                
-                                # Strip markdown if present
-                                if fixed_code.strip().startswith("```"):
-                                    lines = fixed_code.strip().split("\n")
-                                    fixed_code = "\n".join(lines[1:-1])
-                                
-                                # ✅ LLM çıktısına da auto-fix uygula!
-                                print(f"[Coder] 🔧 LLM çıktısına auto-fix uygulanıyor...")
-                                fixed_code = self._auto_fix_common_errors(fixed_code)
-                                
-                                # Düzeltilmiş kodu kontrol et
-                                is_valid_fixed, syntax_error_fixed = self._check_syntax(fixed_code, clean_filename)
-                                if is_valid_fixed:
-                                    print(f"[Coder] ✅ Syntax hatası düzeltildi!")
-                                    content = fixed_code
-                                    is_valid = True  # ✅ is_valid'i güncelle!
-                                    break
-                                else:
-                                    print(f"[Coder] ❌ Düzeltme başarısız: {syntax_error_fixed}")
-                                    syntax_error = syntax_error_fixed
-                            except Exception as e:
-                                print(f"[Coder] ❌ Düzeltme hatası: {e}")
-                        
-                        # 4. Hala hatalıysa dosyayı KAYDETME
-                        if not is_valid:
-                            print(f"[Coder] ⛔ KRITIK: Syntax hatası düzeltilemedi, dosya kaydedilmeyecek: {clean_filename}")
-                            continue  # Bu dosyayı atla, kaydetme
+                        print(f"[Coder] CRITICAL: Syntax unfixable, skipping: {clean_filename}")
+                        continue
 
                 # Save to workspace
                 save_result = await self.use_tool("write_file", path=str(save_path), content=content)
